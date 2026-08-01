@@ -70,4 +70,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = @(Get-ChildItem release -File | ForEach-Object FullName)
-          gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes --title "GameVault $env:GITHUB_REF_NAME"
+          gh release create $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes --title "GameVault $env:GITHUB_REF_NAME"
