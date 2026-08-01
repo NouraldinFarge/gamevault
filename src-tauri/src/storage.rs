@@ -65,12 +65,24 @@ pub struct ApplyScanResult {
     pub updated: usize,
 }
 
+#[cfg(test)]
 pub fn open_database(path: &Path) -> Result<Connection, String> {
+    open_database_with_settings(path, &Settings::default())
+}
+
+pub fn open_portable_database(path: &Path, portable_root: &Path) -> Result<Connection, String> {
+    open_database_with_settings(path, &Settings::for_portable_root(portable_root))
+}
+
+fn open_database_with_settings(
+    path: &Path,
+    initial_settings: &Settings,
+) -> Result<Connection, String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
 
-    match open_and_initialize(path) {
+    match open_and_initialize(path, initial_settings) {
         Ok(connection) => Ok(connection),
         Err(first_error) => {
             let stamp = Utc::now().format("%Y%m%d-%H%M%S");
@@ -80,12 +92,12 @@ pub fn open_database(path: &Path) -> Result<Connection, String> {
                     format!("Database recovery failed after {first_error}: {error}")
                 })?;
             }
-            open_and_initialize(path)
+            open_and_initialize(path, initial_settings)
         }
     }
 }
 
-fn open_and_initialize(path: &Path) -> Result<Connection, String> {
+fn open_and_initialize(path: &Path, initial_settings: &Settings) -> Result<Connection, String> {
     let connection = Connection::open(path).map_err(|error| error.to_string())?;
     connection
         .busy_timeout(std::time::Duration::from_secs(5))
@@ -102,10 +114,73 @@ fn open_and_initialize(path: &Path) -> Result<Connection, String> {
         .map_err(|error| error.to_string())?;
     ensure_schema_migrations(&connection)?;
 
-    if get_settings(&connection).is_err() {
-        save_settings(&connection, &Settings::default())?;
+    let has_application_settings: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM settings WHERE key = 'application'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| error.to_string())?;
+    if has_application_settings == 0 {
+        save_settings(&connection, initial_settings)?;
+    } else {
+        get_settings(&connection)?;
     }
     Ok(connection)
+}
+
+pub fn migrate_legacy_portability_defaults(
+    connection: &Connection,
+    portable_root: &Path,
+) -> Result<(), String> {
+    let mut settings = get_settings(connection)?;
+    let managed_root = portable_root.join("library");
+    let games_root = managed_root.join("Games");
+    let managed_was_legacy = matches_legacy_default(&settings.managed_root);
+    let mut migrated = false;
+
+    if managed_was_legacy {
+        settings.managed_root = managed_root.to_string_lossy().to_string();
+        migrated = true;
+    }
+
+    for root in &mut settings.library_roots {
+        if matches_legacy_library_root(root) || (managed_was_legacy && matches_legacy_default(root))
+        {
+            *root = games_root.to_string_lossy().to_string();
+            migrated = true;
+        }
+    }
+
+    if settings.library_roots.is_empty() {
+        settings
+            .library_roots
+            .push(games_root.to_string_lossy().to_string());
+        migrated = true;
+    }
+
+    if migrated {
+        connection
+            .execute(
+                "UPDATE games SET detection_status = 'missing', updated_at = ?1
+                 WHERE lower(install_path) LIKE lower('E:\\SteamRIPPED%')
+                    OR lower(install_path) LIKE lower('E:\\GameVault%')",
+                [Utc::now().to_rfc3339()],
+            )
+            .map_err(|error| error.to_string())?;
+        save_settings(connection, &settings)?;
+    }
+
+    Ok(())
+}
+
+fn matches_legacy_default(value: &str) -> bool {
+    value.eq_ignore_ascii_case(r"E:\SteamRIPPED") || value.eq_ignore_ascii_case(r"E:\GameVault")
+}
+
+fn matches_legacy_library_root(value: &str) -> bool {
+    value.eq_ignore_ascii_case(r"E:\SteamRIPPED\Games")
+        || value.eq_ignore_ascii_case(r"E:\GameVault\Games")
 }
 
 fn ensure_schema_migrations(connection: &Connection) -> Result<(), String> {
@@ -748,5 +823,60 @@ mod tests {
         let linked = save_game_metadata(&connection, &game.id, &metadata).expect("metadata");
         assert_eq!(linked.metadata.provider.as_deref(), Some("steam"));
         assert_eq!(linked.metadata.external_id.as_deref(), Some("440"));
+    }
+
+    #[test]
+    fn portable_database_uses_a_relative_managed_library() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let portable_root = directory.path().join("GameVault portable");
+        let database = portable_root.join("data").join("library.db");
+        let connection = open_portable_database(&database, &portable_root).expect("database");
+        let settings = get_settings(&connection).expect("settings");
+
+        assert_eq!(
+            PathBuf::from(settings.managed_root),
+            portable_root.join("library")
+        );
+        assert_eq!(
+            settings.library_roots,
+            vec![portable_root
+                .join("library")
+                .join("Games")
+                .to_string_lossy()
+                .to_string()]
+        );
+    }
+
+    #[test]
+    fn legacy_e_drive_defaults_migrate_to_the_portable_library() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let portable_root = directory.path().join("GameVault portable");
+        let database = portable_root.join("data").join("library.db");
+        let connection = open_database(&database).expect("database");
+        save_settings(
+            &connection,
+            &Settings {
+                managed_root: r"E:\GameVault".to_string(),
+                library_roots: vec![r"E:\GameVault\Games".to_string()],
+                ..Settings::default()
+            },
+        )
+        .expect("legacy settings");
+
+        migrate_legacy_portability_defaults(&connection, &portable_root).expect("migration");
+        let settings = get_settings(&connection).expect("settings");
+
+        assert_eq!(
+            PathBuf::from(settings.managed_root),
+            portable_root.join("library")
+        );
+        assert_eq!(
+            settings.library_roots,
+            vec![portable_root
+                .join("library")
+                .join("Games")
+                .to_string_lossy()
+                .to_string()]
+        );
     }
 }

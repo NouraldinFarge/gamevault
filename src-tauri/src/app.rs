@@ -18,7 +18,8 @@ impl AppCore {
     pub fn new(portable_root: PathBuf) -> Result<Self, String> {
         ensure_portable_layout(&portable_root)?;
         let database_path = portable_root.join("data").join("library.db");
-        let database = storage::open_database(&database_path)?;
+        let database = storage::open_portable_database(&database_path, &portable_root)?;
+        storage::migrate_legacy_portability_defaults(&database, &portable_root)?;
         Ok(Self {
             database: Mutex::new(database),
             database_path,

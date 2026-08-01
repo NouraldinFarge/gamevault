@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,9 +78,16 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
+        Self::for_portable_root(&default_portable_root())
+    }
+}
+
+impl Settings {
+    pub fn for_portable_root(portable_root: &Path) -> Self {
+        let managed_root = portable_root.join("library");
         Self {
-            managed_root: default_managed_root(),
-            library_roots: vec![r"E:\GameVault\Games".to_string()],
+            managed_root: managed_root.to_string_lossy().to_string(),
+            library_roots: vec![managed_root.join("Games").to_string_lossy().to_string()],
             scan_depth: 4,
             theme: "midnight".to_string(),
             default_launch_args: Vec::new(),
@@ -90,7 +98,18 @@ impl Default for Settings {
 }
 
 fn default_managed_root() -> String {
-    r"E:\GameVault".to_string()
+    default_portable_root()
+        .join("library")
+        .to_string_lossy()
+        .to_string()
+}
+
+fn default_portable_root() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("GameVault"))
 }
 
 #[derive(Debug, Clone, Serialize)]

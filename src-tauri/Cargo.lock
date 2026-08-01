@@ -1177,7 +1177,7 @@ dependencies = [
 
 [[package]]
 name = "gamevault"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "chrono",
  "rfd",
