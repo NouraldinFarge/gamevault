@@ -38,7 +38,10 @@ finally {
     }
 }
 
-$checksumPath = Join-Path $project "checksums\$([System.IO.Path]::GetFileName($archive)).sha256"
+$checksumDirectory = [System.IO.Path]::GetFullPath((Join-Path $project 'checksums'))
+Assert-ChildPath -Path $checksumDirectory -Parent $project -Label 'checksum directory'
+New-Item -ItemType Directory -Path $checksumDirectory -Force | Out-Null
+$checksumPath = Join-Path $checksumDirectory "$([System.IO.Path]::GetFileName($archive)).sha256"
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $([System.IO.Path]::GetFileName($archive))" | Set-Content -LiteralPath $checksumPath -Encoding ascii
 Write-Host 'Portable ZIP and checksum created.' -ForegroundColor Green
