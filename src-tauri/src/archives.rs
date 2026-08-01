@@ -251,7 +251,7 @@ pub fn list_inbox(managed_root: &Path) -> Result<Vec<InboxArchive>, String> {
             })
         })
         .collect::<Vec<_>>();
-    archives.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    archives.sort_by_key(|archive| archive.name.to_lowercase());
     Ok(archives)
 }
 
@@ -724,16 +724,12 @@ fn clean_package_extras(
             moved += 1;
         }
     }
-    if staging_path.exists() {
-        if fs::create_dir_all(&destination_root).is_ok() {
-            let target = unique_destination(&destination_root.join("Package Wrapper"));
-            match fs::rename(staging_path, target) {
-                Ok(()) => moved += 1,
-                Err(error) if error.kind() == ErrorKind::NotFound => {}
-                Err(error) => {
-                    warnings.push(format!("Package wrapper cleanup was incomplete: {error}"))
-                }
-            }
+    if staging_path.exists() && fs::create_dir_all(&destination_root).is_ok() {
+        let target = unique_destination(&destination_root.join("Package Wrapper"));
+        match fs::rename(staging_path, target) {
+            Ok(()) => moved += 1,
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => warnings.push(format!("Package wrapper cleanup was incomplete: {error}")),
         }
     }
     (moved > 0).then_some(destination_root)

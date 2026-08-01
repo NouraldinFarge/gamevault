@@ -1,10 +1,33 @@
 # GameVault
 
+[![CI](https://github.com/NouraldinFarge/gamevault/actions/workflows/ci.yml/badge.svg)](https://github.com/NouraldinFarge/gamevault/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/NouraldinFarge/gamevault/actions/workflows/codeql.yml/badge.svg)](https://github.com/NouraldinFarge/gamevault/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/NouraldinFarge/gamevault)](https://github.com/NouraldinFarge/gamevault/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **A portable, local-first Windows game library and launcher with a review-gated archive intake pipeline.**
 
 Active development · 2026 · Version 0.3.1
 
 GameVault organizes games the user already owns. It never downloads games and never treats an archive as trusted input. ZIPs move through a staged review workflow before they can enter the managed library, while official store pages can supply optional catalog metadata without becoming a launch dependency.
+
+## Product preview
+
+![GameVault local library](docs/images/gamevault-library.jpg)
+
+| Review-oriented local files | Searchable library |
+| --- | --- |
+| ![Local-files intake and managed folders](docs/images/gamevault-local-files.jpg) | ![Offline library grid](docs/images/gamevault-library-grid.jpg) |
+
+```mermaid
+flowchart LR
+    A["User-owned ZIP"] --> B["7-Zip integrity test"]
+    B --> C["Isolated staging"]
+    C --> D["Path, link, marker, and executable review"]
+    D --> E{"Explicit approval"}
+    E -->|Approve| F["Managed local library"]
+    E -->|Reject| G["Quarantine or cleanup"]
+```
 
 ## What it demonstrates
 
@@ -60,6 +83,12 @@ cargo run --manifest-path src-tauri/Cargo.toml
 ## Portable release
 
 Double-click `BUILD-LATEST.bat` to run the release pipeline and produce a portable executable and ZIP. The project deliberately does not configure installer bundle targets.
+
+## Development approach
+
+AI agents assisted with research, implementation, and iteration. I retained ownership of product direction, architecture, technical review, testing, archive-safety boundaries, and release approval. Generated suggestions were treated as untrusted until reviewed against synthetic hostile-input fixtures and automated verification.
+
+See [`ROADMAP.md`](ROADMAP.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), and [`SECURITY.md`](SECURITY.md) for current priorities and project policies.
 
 ## License
 

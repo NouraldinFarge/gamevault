@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible GameVault problem without sharing private content.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never attach game archives, credentials, license keys, or personal library databases.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 0.3.1
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include expected behavior and a safe, minimal reproduction.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety context
+      description: State whether archive intake, path handling, promotion, or process launch was involved.
+    validations:
+      required: true
+

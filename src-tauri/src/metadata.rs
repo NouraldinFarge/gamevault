@@ -170,7 +170,7 @@ fn lookup_store_page(provider: &str, identifier: &str) -> Result<GameMetadata, S
         .unwrap_or(effective_url);
     let external_id = Url::parse(&canonical).ok().and_then(|url| {
         url.path_segments()
-            .and_then(|segments| segments.filter(|segment| !segment.is_empty()).last())
+            .and_then(|mut segments| segments.rfind(|segment| !segment.is_empty()))
             .map(str::to_string)
     });
     let title = raw_title.map(|value| clean_store_title(provider, &value));

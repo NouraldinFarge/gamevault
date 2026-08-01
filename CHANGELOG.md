@@ -2,6 +2,7 @@
 
 ## 0.3.1 - 2026-07-18
 
+- Add GitHub CI, CodeQL, dependency updates, private security reporting guidance, and contributor workflows.
 - Hide Windows verbatim-path prefixes such as `\\?\` from archive and staging UI text.
 - Shorten executable choices to game-relative paths so the selector remains readable.
 - Show the exact package-relative item that triggered an installation block.
