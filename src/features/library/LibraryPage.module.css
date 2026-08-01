@@ -1,0 +1,165 @@
+.page {
+  display: grid;
+  gap: var(--space-6);
+  max-inline-size: 100rem;
+  margin-inline: auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.header h1 {
+  margin-block-end: var(--space-2);
+  font-size: var(--text-2xl);
+}
+
+.header p:last-child {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.viewSwitch {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.viewSwitch button {
+  display: grid;
+  place-items: center;
+  inline-size: 2.4rem;
+  block-size: 2.2rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.viewSwitch button.selected {
+  background: var(--color-surface-strong);
+  color: var(--color-action-hover);
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) repeat(3, auto);
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--color-surface) 88%, transparent);
+}
+
+.search,
+.selectControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 2.65rem;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-canvas-deep);
+  color: var(--color-text-faint);
+}
+
+.search input,
+.selectControl select {
+  min-inline-size: 0;
+  inline-size: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.selectControl select {
+  inline-size: auto;
+  cursor: pointer;
+}
+
+.results {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: 2.2rem;
+  color: var(--color-text-faint);
+  font-size: var(--text-sm);
+}
+
+.games {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-4);
+}
+
+.games[data-view="list"] {
+  grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  min-block-size: 26rem;
+  padding: var(--space-8);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.empty svg {
+  margin-block-end: var(--space-4);
+  color: var(--color-action);
+}
+
+.empty h2 {
+  margin-block-end: var(--space-2);
+}
+
+@media (max-width: 76rem) {
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+  }
+
+  .toolbar > :last-child {
+    grid-column: 2 / -1;
+  }
+}
+
+@media (max-width: 56rem) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar > :last-child {
+    grid-column: auto;
+  }
+
+  .selectControl select {
+    inline-size: 100%;
+  }
+}

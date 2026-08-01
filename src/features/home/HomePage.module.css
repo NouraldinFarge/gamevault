@@ -1,0 +1,240 @@
+.page {
+  display: grid;
+  gap: var(--space-8);
+  max-inline-size: 96rem;
+  margin-inline: auto;
+}
+
+.topline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.topline h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+}
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  min-block-size: clamp(26rem, 52vh, 38rem);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.heroArt {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  min-block-size: 100%;
+  border-radius: 0;
+  transform: scale(1.01);
+}
+
+.heroShade {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgb(5 9 17 / 93%) 0%, rgb(5 9 17 / 72%) 42%, transparent 78%),
+    linear-gradient(0deg, rgb(5 9 17 / 72%), transparent 50%);
+}
+
+.heroContent {
+  display: grid;
+  align-content: end;
+  min-block-size: inherit;
+  max-inline-size: 44rem;
+  padding: clamp(2rem, 5vw, 5rem);
+}
+
+.heroContent h2 {
+  max-inline-size: 11ch;
+  margin-block-end: var(--space-4);
+  font-size: var(--text-hero);
+}
+
+.heroContent > p:not(.eyebrow) {
+  max-inline-size: 40rem;
+  margin-block-end: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: var(--text-lg);
+}
+
+.heroMeta,
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.heroMeta {
+  margin-block-end: var(--space-6);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.heroActions {
+  gap: var(--space-3);
+}
+
+.emptyHero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-8);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+}
+
+.emptyHero svg {
+  color: var(--color-action);
+}
+
+.emptyHero h2 {
+  margin-block-end: var(--space-2);
+}
+
+.emptyHero p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.statCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0 var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.statCard svg {
+  grid-row: 1 / span 2;
+  color: var(--color-action-hover);
+}
+
+.statCard strong {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+}
+
+.statCard span {
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+
+.listSection a {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.gameList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.gameRow {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-surface) 78%, transparent);
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.gameRow:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+}
+
+.gameRow > div {
+  min-block-size: 3.2rem;
+  border-radius: var(--radius-sm);
+}
+
+.gameRowText {
+  min-inline-size: 0;
+}
+
+.gameRowText strong,
+.gameRowText small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gameRowText strong {
+  color: var(--color-text);
+}
+
+.gameRowText small {
+  color: var(--color-text-faint);
+}
+
+.emptyText {
+  padding: var(--space-6);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-faint);
+}
+
+@media (max-width: 75rem) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 52rem) {
+  .topline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .heroShade {
+    background: linear-gradient(0deg, rgb(5 9 17 / 95%) 0%, rgb(5 9 17 / 56%) 80%);
+  }
+
+  .heroContent {
+    align-content: end;
+  }
+
+  .emptyHero {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,110 @@
+.artwork {
+  --art-a: #2aa9e0;
+  --art-b: #5b44e8;
+  --art-c: #10182e;
+  position: relative;
+  isolation: isolate;
+  min-block-size: 11rem;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 72% 18%,
+      color-mix(in oklab, var(--art-a) 68%, transparent),
+      transparent 32%
+    ),
+    linear-gradient(var(--art-angle), var(--art-b), var(--art-c) 72%);
+}
+
+.artwork[data-palette="1"] {
+  --art-a: #55d6be;
+  --art-b: #1768ac;
+  --art-c: #0c1728;
+}
+.artwork[data-palette="2"] {
+  --art-a: #f49fbc;
+  --art-b: #7d47d9;
+  --art-c: #171126;
+}
+.artwork[data-palette="3"] {
+  --art-a: #f7b267;
+  --art-b: #d1495b;
+  --art-c: #25121b;
+}
+.artwork[data-palette="4"] {
+  --art-a: #76e6ff;
+  --art-b: #275dad;
+  --art-c: #091426;
+}
+.artwork[data-palette="5"] {
+  --art-a: #c8f169;
+  --art-b: #197278;
+  --art-c: #0b1d21;
+}
+.artwork[data-palette="6"] {
+  --art-a: #f8e16c;
+  --art-b: #5b2a86;
+  --art-c: #191126;
+}
+.artwork[data-palette="7"] {
+  --art-a: #ff8fa3;
+  --art-b: #2962ff;
+  --art-c: #10152c;
+}
+
+.storeImage {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.monogram[data-hidden="true"] {
+  display: none;
+}
+
+.orb {
+  position: absolute;
+  inline-size: 46%;
+  aspect-ratio: 1;
+  inset: 10% 8% auto auto;
+  border: 1px solid color-mix(in oklab, white 28%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2rem color-mix(in oklab, var(--art-a) 8%, transparent),
+    0 0 4rem color-mix(in oklab, var(--art-a) 46%, transparent);
+}
+
+.grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(color-mix(in oklab, white 28%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, white 28%, transparent) 1px, transparent 1px);
+  background-size: 2.5rem 2.5rem;
+  transform: perspective(16rem) rotateX(58deg) scale(1.45) translateY(24%);
+  transform-origin: bottom;
+}
+
+.monogram {
+  position: absolute;
+  inset: auto auto 12% 10%;
+  color: color-mix(in oklab, white 92%, var(--art-a));
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 5vw, 4.8rem);
+  font-weight: 760;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  text-shadow: 0 0.5rem 2rem rgb(0 0 0 / 48%);
+}
+
+.compact {
+  min-block-size: 4.5rem;
+}
+
+.compact .monogram {
+  font-size: 1.6rem;
+}

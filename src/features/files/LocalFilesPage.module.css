@@ -1,0 +1,513 @@
+.page {
+  display: grid;
+  gap: var(--space-7, 1.75rem);
+  max-inline-size: 92rem;
+  margin-inline: auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.header h1 {
+  margin-block-end: var(--space-2);
+  font-size: var(--text-2xl);
+}
+
+.header p:last-child {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.legalNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--color-success) 22%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-success) 5%, var(--color-surface));
+  color: var(--color-text-muted);
+}
+
+.legalNotice svg {
+  flex: 0 0 auto;
+  color: var(--color-success);
+}
+
+.legalNotice p {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.progressPanel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid color-mix(in oklab, var(--color-action) 34%, var(--color-border));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(90deg, rgb(42 169 224 / 8%), transparent), var(--color-surface);
+}
+
+.progressPanel > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.progressPanel span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.progressPanel small {
+  color: var(--color-text-faint);
+}
+
+.progressTrack {
+  overflow: hidden;
+  block-size: 0.42rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-canvas-deep);
+}
+
+.progressTrack span {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--color-action);
+  transition: inline-size var(--duration-normal) var(--ease-standard);
+}
+
+.rootList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.workspacePanel,
+.archivePanel,
+.dependencyPanel {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.workspacePanel :global(.section-heading),
+.archivePanel :global(.section-heading),
+.dependencyPanel :global(.section-heading) {
+  margin: 0;
+}
+
+.workspacePanel :global(.section-heading) p:last-child,
+.archivePanel :global(.section-heading) p:last-child,
+.dependencyPanel :global(.section-heading) p:last-child {
+  max-inline-size: 48rem;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.archiveResult {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.inboxQueue,
+.installReview {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-canvas-deep);
+}
+
+.inboxHeading,
+.inboxArchive,
+.installActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.inboxHeading span,
+.inboxArchive span {
+  min-inline-size: 0;
+  flex: 1;
+}
+
+.inboxHeading strong,
+.inboxHeading small,
+.inboxArchive strong,
+.inboxArchive small {
+  display: block;
+}
+
+.inboxHeading small,
+.inboxArchive small,
+.installActions p {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.inboxArchive {
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+}
+
+.inboxArchive > svg {
+  color: var(--color-action);
+}
+
+.inboxArchive strong,
+.inboxArchive small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.installFields {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.55fr) minmax(0, 1.45fr);
+  gap: var(--space-3);
+}
+
+.installFields > label,
+.installFields select {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.installActions {
+  align-items: flex-end;
+}
+
+.installActions p {
+  max-inline-size: 52rem;
+  margin: 0;
+}
+
+.installActions button:disabled {
+  filter: saturate(0.35);
+}
+
+.archiveHeadline,
+.archiveActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.archiveHeadline strong,
+.archiveHeadline small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.archiveHeadline small,
+.archiveActions span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.archiveReady,
+.archiveBlocked {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 750;
+}
+
+.archiveReady {
+  background: rgb(87 214 162 / 10%);
+  color: var(--color-success);
+}
+
+.archiveBlocked {
+  background: rgb(244 197 107 / 10%);
+  color: var(--color-warning);
+}
+
+.warningList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--color-warning) 30%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-warning) 4%, var(--color-canvas-deep));
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  list-style-position: inside;
+}
+
+.blockedDetails {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--color-warning) 30%, var(--color-border));
+  border-radius: var(--radius-md);
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+}
+
+.blockedDetails summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.blockedDetails code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.workspaceFolders {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.workspaceFolder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-canvas-deep);
+}
+
+.workspaceFolder strong,
+.workspaceFolder small {
+  display: block;
+}
+
+.workspaceFolder small {
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.auditSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.auditSummary span {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-canvas-deep);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.auditSummary strong {
+  display: block;
+  color: var(--color-text);
+  font-size: var(--text-xl);
+}
+
+.auditSummary .needsAttention {
+  border-color: color-mix(in oklab, var(--color-warning) 38%, var(--color-border));
+  color: var(--color-warning);
+}
+
+.dependencyList {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.dependencyItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-canvas-deep);
+}
+
+.dependencyItem strong,
+.dependencyItem small {
+  display: block;
+}
+
+.dependencyItem small,
+.dependencyItem p,
+.auditHint,
+.reportPath {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.dependencyItem p,
+.auditHint {
+  margin: var(--space-2) 0 0;
+}
+
+.reportPath {
+  overflow-wrap: anywhere;
+}
+
+.rootCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.rootCard strong,
+.rootCard small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.rootCard small {
+  color: var(--color-text-faint);
+}
+
+.readyIcon,
+.warningIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 2.4rem;
+  block-size: 2.4rem;
+  border-radius: var(--radius-sm);
+}
+
+.readyIcon {
+  background: rgb(87 214 162 / 9%);
+  color: var(--color-success);
+}
+
+.warningIcon {
+  background: rgb(244 197 107 / 9%);
+  color: var(--color-warning);
+}
+
+.emptyRoot {
+  padding: var(--space-6);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.actionCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.actionCard > svg {
+  color: var(--color-action);
+}
+
+.actionCard h2 {
+  margin-block-end: var(--space-2);
+  font-size: var(--text-lg);
+}
+
+.actionCard p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.actionCard > button,
+.depth {
+  grid-column: 2;
+  justify-self: start;
+  margin-block-start: var(--space-2);
+}
+
+.depth {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-strong);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 60rem) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceFolders,
+  .auditSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 38rem) {
+  .workspaceFolders,
+  .auditSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .dependencyItem {
+    grid-template-columns: 1fr;
+  }
+
+  .installFields {
+    grid-template-columns: 1fr;
+  }
+
+  .installActions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .archiveHeadline,
+  .archiveActions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,29 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  inline-size: fit-content;
+  min-block-size: 1.6rem;
+  padding-inline: 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-strong);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.badge[data-status="detected"],
+.badge[data-status="configured"] {
+  border-color: color-mix(in oklab, var(--color-success) 45%, var(--color-border));
+  color: var(--color-success-text);
+  background: color-mix(in oklab, var(--color-success) 10%, var(--color-surface));
+}
+
+.badge[data-status="missing"],
+.badge[data-status="unavailable"] {
+  border-color: color-mix(in oklab, var(--color-warning) 42%, var(--color-border));
+  color: var(--color-warning-text);
+  background: color-mix(in oklab, var(--color-warning) 10%, var(--color-surface));
+}

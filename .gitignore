@@ -1,0 +1,26 @@
+# JavaScript and TypeScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Rust and Tauri
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Local runtime and generated release state
+data/
+config/
+cache/
+logs/
+release/
+test-results/
+playwright-report/
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example
+

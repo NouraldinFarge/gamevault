@@ -1,0 +1,107 @@
+.card {
+  container: game-card / inline-size;
+  min-inline-size: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 11%);
+  transition:
+    transform var(--duration-normal) var(--ease-standard),
+    border-color var(--duration-normal) var(--ease-standard),
+    box-shadow var(--duration-normal) var(--ease-standard);
+}
+
+.card:hover {
+  border-color: color-mix(in oklab, var(--color-action) 34%, var(--color-border));
+  box-shadow: var(--shadow-card);
+  transform: translateY(-3px);
+}
+
+.coverLink {
+  display: block;
+}
+
+.artwork {
+  aspect-ratio: 4 / 3;
+  min-block-size: 0;
+  border-radius: 0;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.favorite {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.favorite:hover,
+.favorite[aria-pressed="true"] {
+  background: rgb(255 122 138 / 9%);
+  color: #ff8fa2;
+}
+
+.title {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 680;
+  letter-spacing: -0.025em;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.card[data-view="list"] {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+}
+
+.card[data-view="list"] .artwork {
+  block-size: 100%;
+  min-block-size: 7rem;
+  aspect-ratio: auto;
+}
+
+.card[data-view="list"] .body {
+  align-content: center;
+}
+
+.card[data-view="list"]:hover {
+  transform: translateX(2px);
+}

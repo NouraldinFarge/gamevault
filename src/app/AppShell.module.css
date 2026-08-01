@@ -1,0 +1,196 @@
+.shell {
+  min-block-size: 100vh;
+  background:
+    radial-gradient(circle at 86% -5%, rgb(42 169 224 / 7%), transparent 33rem), var(--color-canvas);
+}
+
+.skipLink {
+  position: fixed;
+  z-index: 20;
+  inset: 0 auto auto 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 0 0 var(--radius-md) 0;
+  background: var(--color-action);
+  color: #051018;
+  font-weight: 700;
+  transform: translateY(-110%);
+}
+
+.skipLink:focus {
+  transform: translateY(0);
+}
+
+.sidebar {
+  position: fixed;
+  z-index: 10;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  inline-size: 15.5rem;
+  padding: var(--space-5);
+  border-inline-end: 1px solid var(--color-border);
+  background: color-mix(in oklab, var(--color-canvas-deep) 94%, transparent);
+  backdrop-filter: blur(1.25rem);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.brandMark {
+  display: grid;
+  place-items: center;
+  inline-size: 2.7rem;
+  block-size: 2.7rem;
+  border: 1px solid rgb(117 219 255 / 28%);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(135deg, rgb(42 169 224 / 34%), rgb(91 68 232 / 26%)),
+    var(--color-surface-raised);
+  color: var(--color-action-hover);
+  box-shadow: 0 0 2rem rgb(42 169 224 / 12%);
+}
+
+.brand strong,
+.brand small {
+  display: block;
+}
+
+.brand strong {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+.brand small {
+  color: var(--color-text-faint);
+  font-size: 0.72rem;
+}
+
+.navigation {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-10);
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: 2.8rem;
+  padding-inline: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 620;
+  text-decoration: none;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+
+.navLink:hover {
+  color: var(--color-text);
+  background: rgb(255 255 255 / 4%);
+}
+
+.navLink.active {
+  border-color: rgb(69 190 239 / 18%);
+  background: linear-gradient(90deg, rgb(42 169 224 / 14%), transparent), var(--color-surface);
+  color: var(--color-text);
+}
+
+.navLink.active svg {
+  color: var(--color-action-hover);
+}
+
+.sidebarFooter {
+  margin-block-start: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.libraryPulse {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.libraryPulse strong,
+.libraryPulse small {
+  display: block;
+}
+
+.libraryPulse strong {
+  font-size: var(--text-sm);
+}
+
+.libraryPulse small {
+  max-inline-size: 9rem;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: 0.69rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pulseIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 2rem;
+  block-size: 2rem;
+  border-radius: var(--radius-sm);
+  background: rgb(42 169 224 / 10%);
+  color: var(--color-action-hover);
+}
+
+.progressTrack {
+  overflow: hidden;
+  block-size: 0.22rem;
+  margin-block-start: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-strong);
+}
+
+.progressTrack span {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--color-action);
+  transition: inline-size var(--duration-normal) var(--ease-standard);
+}
+
+.main {
+  min-block-size: 100vh;
+  margin-inline-start: 15.5rem;
+  padding: clamp(1.25rem, 3vw, 3rem);
+}
+
+@media (max-width: 68rem) {
+  .sidebar {
+    inline-size: 5.5rem;
+    padding-inline: var(--space-3);
+  }
+
+  .brand > span:last-child,
+  .navLink span,
+  .sidebarFooter {
+    display: none;
+  }
+
+  .brand,
+  .navLink {
+    justify-content: center;
+  }
+
+  .main {
+    margin-inline-start: 5.5rem;
+  }
+}

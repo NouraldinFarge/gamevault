@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">GameVault icon</title>
+  <defs>
+    <linearGradient id="background" x1="24" y1="20" x2="226" y2="238" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17233B"/>
+      <stop offset="1" stop-color="#080D19"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="58" y1="76" x2="198" y2="181" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#62D7FF"/>
+      <stop offset="1" stop-color="#2A79E0"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#background)" stroke="#2AA9E0" stroke-opacity=".35" stroke-width="4"/>
+  <path d="M77 88c-15 4-27 17-31 34l-11 44c-4 17 13 30 28 20l28-19h74l28 19c15 10 32-3 28-20l-11-44c-4-17-16-30-31-34-34-9-68-9-102 0Z" fill="#0D1628" stroke="url(#accent)" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M82 116v34M65 133h34" stroke="#EAF6FF" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="165" cy="122" r="7" fill="#69D8FF"/>
+  <circle cx="184" cy="143" r="7" fill="#69D8FF"/>
+  <path d="M111 102h34" stroke="#7990AD" stroke-width="7" stroke-linecap="round"/>
+</svg>
+
