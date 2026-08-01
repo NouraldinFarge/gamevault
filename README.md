@@ -7,7 +7,7 @@
 
 **A portable, local-first Windows game library and launcher with a review-gated archive intake pipeline.**
 
-Active development · 2026 · Version 0.3.2
+Active development · 2026 · Version 0.3.4
 
 GameVault organizes games the user already owns. It never downloads games and never treats an archive as trusted input. ZIPs move through a staged review workflow before they can enter the managed library, while official store pages can supply optional catalog metadata without becoming a launch dependency.
 
