@@ -8,6 +8,11 @@ $requiredFiles = @(
     'VERSION',
     'package.json',
     'pnpm-lock.yaml',
+    'config\default-settings.json',
+    'docs\PORTABLE-README.txt',
+    'docs\RUNTIME-README.txt',
+    'assets\README.txt',
+    'LICENSE',
     'src-tauri\Cargo.toml',
     'src-tauri\tauri.conf.json',
     'src\main.tsx'
@@ -15,6 +20,17 @@ $requiredFiles = @(
 foreach ($file in $requiredFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $workspace $file) -PathType Leaf)) {
         throw "Required build file is missing: $file"
+    }
+}
+
+$defaultSettingsPath = Join-Path $workspace 'config\default-settings.json'
+$defaultSettings = Get-Content -Raw -LiteralPath $defaultSettingsPath | ConvertFrom-Json
+if ([System.IO.Path]::IsPathRooted([string]$defaultSettings.managedRoot)) {
+    throw 'Portable default managedRoot must be relative to the application directory.'
+}
+foreach ($libraryRoot in @($defaultSettings.libraryRoots)) {
+    if ([System.IO.Path]::IsPathRooted([string]$libraryRoot)) {
+        throw 'Portable default libraryRoots entries must be relative to the application directory.'
     }
 }
 
@@ -34,4 +50,3 @@ $pnpmVersion = & pnpm --version
 Write-Host 'Environment validated.' -ForegroundColor Green
 Write-Host "  $nodeVersion; pnpm $pnpmVersion"
 Write-Host "  $rustVersion; $cargoVersion"
-

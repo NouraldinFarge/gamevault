@@ -15,8 +15,8 @@ const makeGame = (
   title,
   description:
     "A locally installed game in your portable library. Add a personal description, tags, and launch preferences from the details view.",
-  installPath: `E:\\GameVault\\Games\\${title}`,
-  executablePath: `E:\\GameVault\\Games\\${title}\\${title.replaceAll(" ", "")}.exe`,
+  installPath: `D:\\Portable Apps\\GameVault\\library\\Games\\${title}`,
+  executablePath: `D:\\Portable Apps\\GameVault\\library\\Games\\${title}\\${title.replaceAll(" ", "")}.exe`,
   launchArgs: [],
   tags: category === "RPG" ? ["Story", "Single-player"] : ["Local"],
   category,
@@ -67,8 +67,8 @@ const games: Game[] = [
 export const demoSnapshot: AppSnapshot = {
   games,
   settings: {
-    managedRoot: "E:\\GameVault",
-    libraryRoots: ["E:\\GameVault\\Games"],
+    managedRoot: "D:\\Portable Apps\\GameVault\\library",
+    libraryRoots: ["D:\\Portable Apps\\GameVault\\library\\Games"],
     scanDepth: 4,
     theme: "midnight",
     defaultLaunchArgs: [],
