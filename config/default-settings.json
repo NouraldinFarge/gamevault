@@ -1,0 +1,8 @@
+{
+  "managedRoot": "library",
+  "libraryRoots": ["library\\Games"],
+  "scanDepth": 4,
+  "theme": "midnight",
+  "defaultLaunchArgs": [],
+  "loggingEnabled": true
+}

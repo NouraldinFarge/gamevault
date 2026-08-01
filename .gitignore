@@ -11,7 +11,8 @@ src-tauri/gen/
 
 # Local runtime and generated release state
 data/
-config/
+config/*
+!config/default-settings.json
 cache/
 logs/
 release/
@@ -23,4 +24,3 @@ playwright-report/
 .env
 .env.*
 !.env.example
-
