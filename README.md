@@ -7,9 +7,11 @@
 
 **A portable, local-first Windows game library and launcher with a review-gated archive intake pipeline.**
 
-Active development · 2026 · Version 0.3.1
+Active development · 2026 · Version 0.3.2
 
 GameVault organizes games the user already owns. It never downloads games and never treats an archive as trusted input. ZIPs move through a staged review workflow before they can enter the managed library, while official store pages can supply optional catalog metadata without becoming a launch dependency.
+
+**Try it:** [Download the latest verified Windows release](https://github.com/NouraldinFarge/gamevault/releases/latest) · [Review source](https://github.com/NouraldinFarge/gamevault) · [Read the archive-safety boundary](SECURITY.md)
 
 ## Product preview
 
@@ -33,7 +35,7 @@ flowchart LR
 
 - **Defensive archive handling:** test archives before extraction, reject path traversal and link/reparse entries, and avoid recursive nested-archive expansion.
 - **Review before execution:** stage content, inspect the detected executable and safety markers, then require explicit approval before promotion.
-- **Portable local state:** keep the library database and configuration beside the app instead of tying them to an installer or cloud account.
+- **Portable local state:** keep the app database, configuration, and managed `library/` folder beside the executable by default, while allowing the user to choose another dedicated location.
 - **Failure-tolerant enrichment:** allowlist Steam, GOG, and Epic product/artwork URLs while ensuring metadata failures never block local launch.
 - **Rust desktop authority:** place filesystem, process, and SQLite operations behind a narrow Tauri command boundary.
 
@@ -83,6 +85,10 @@ cargo run --manifest-path src-tauri/Cargo.toml
 ## Portable release
 
 Double-click `BUILD-LATEST.bat` to run the release pipeline and produce a portable executable and ZIP. The project deliberately does not configure installer bundle targets.
+
+Fresh installs create the managed game-library layout under `library/` beside the portable executable. Upgrades migrate the former forced `E:\GameVault` and `E:\SteamRIPPED` defaults to that portable-relative layout; a deliberately chosen custom folder remains configurable in Settings.
+
+Future version tags are built on GitHub's Windows runner from the tagged source. That workflow publishes the portable ZIP, SHA-256 checksum, SPDX SBOM, and GitHub artifact-provenance attestation.
 
 ## Development approach
 

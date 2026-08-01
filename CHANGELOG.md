@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 - 2026-08-01
+
+- Replace the forced `E:\GameVault` default with a portable-relative `library/` folder beside the executable.
+- Migrate the former `E:\GameVault` and `E:\SteamRIPPED` defaults without requiring an `E:` drive.
+- Add regression coverage for fresh portable settings and the legacy-path migration.
+- Update portable guidance and browser-preview fixtures to avoid presenting a fixed drive as required.
+
 ## 0.3.1 - 2026-07-18
 
 - Add GitHub CI, CodeQL, dependency updates, private security reporting guidance, and contributor workflows.

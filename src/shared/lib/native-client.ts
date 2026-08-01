@@ -178,7 +178,7 @@ export const nativeClient = {
     if (!isDesktopRuntime()) {
       return {
         ok: true,
-        appVersion: "0.3.1",
+        appVersion: "0.3.2",
         portableRoot: mockSnapshot.portableRoot,
         databasePath: `${mockSnapshot.portableRoot}\\data\\library.db`,
         sqliteVersion: mockSnapshot.sqliteVersion,
@@ -266,7 +266,8 @@ export const nativeClient = {
   },
 
   async chooseGameArchive(): Promise<string | null> {
-    if (!isDesktopRuntime()) return "E:\\GameVault\\Inbox\\Example Game.zip";
+    if (!isDesktopRuntime())
+      return "D:\\Portable Apps\\GameVault\\library\\Inbox\\Example Game.zip";
     return invoke<string | null>("choose_game_archive");
   },
 
@@ -294,13 +295,13 @@ export const nativeClient = {
       await pause(500);
       return {
         archivePath,
-        stagingPath: "E:\\GameVault\\Staging\\Example Game-20260718-120000",
+        stagingPath: "D:\\Portable Apps\\GameVault\\library\\Staging\\Example Game-20260718-120000",
         filesExtracted: 1284,
         executableCandidates: [
-          "E:\\GameVault\\Staging\\Example Game-20260718-120000\\Example Game\\ExampleGame.exe",
+          "D:\\Portable Apps\\GameVault\\library\\Staging\\Example Game-20260718-120000\\Example Game\\ExampleGame.exe",
         ],
         warnings: ["Contains a Redist folder; audit it before installing anything."],
-        reportPath: "E:\\GameVault\\Reports\\archive-intake-demo.json",
+        reportPath: "D:\\Portable Apps\\GameVault\\library\\Reports\\archive-intake-demo.json",
       };
     }
     return StagedArchiveSchema.parse(await invoke("stage_game_archive", { archivePath }));
@@ -343,14 +344,14 @@ export const nativeClient = {
       const game = structuredClone(mockSnapshot.games[0]);
       return InstalledPackageSchema.parse({
         game: { ...game, title: input.title },
-        installedPath: `E:\\GameVault\\Games\\${input.title}`,
+        installedPath: `D:\\Portable Apps\\GameVault\\library\\Games\\${input.title}`,
         backupPath: null,
-        dependenciesPath: `E:\\GameVault\\Dependencies\\Bundled\\${input.title}`,
+        dependenciesPath: `D:\\Portable Apps\\GameVault\\library\\Dependencies\\Bundled\\${input.title}`,
         extrasPath: null,
         archivedPackagePath: null,
         updated: false,
         warnings: [],
-        reportPath: "E:\\GameVault\\Reports\\game-install-demo.json",
+        reportPath: "D:\\Portable Apps\\GameVault\\library\\Reports\\game-install-demo.json",
       });
     }
     return InstalledPackageSchema.parse(await invoke("install_staged_package", { input }));

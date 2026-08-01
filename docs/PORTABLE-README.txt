@@ -3,11 +3,13 @@ GameVault Portable
 
 1. Extract the entire ZIP into any writable folder.
 2. Run GameVault.exe.
-3. Open Local files, prepare E:\GameVault, and scan E:\GameVault\Games.
+3. Open Local files and prepare the default library folder beside the app, or
+   choose another dedicated managed folder in Settings.
 4. Correct an executable from a game's details page when needed.
 
 ZIP intake:
-  Place user-owned ZIP archives in E:\GameVault\Inbox. Local files can test,
+  Place user-owned ZIP archives in library\Inbox beside the app (or the Inbox
+  under your selected managed folder). Local files can test,
   extract, review, clean, and organize them without executing archive content.
   Suspicious platform-modification markers block installation, and an existing
   game is backed up before a staged update is promoted.
@@ -21,6 +23,8 @@ All GameVault-controlled state remains in this folder:
   config\  portable configuration
   logs\    redacted local diagnostics
   cache\   disposable cached data
+  library\ managed Inbox, Staging, Games, Archives, Dependencies, Quarantine,
+           and Reports folders (unless the user selects another location)
 
 No installer, administrator rights, registry setup, service, scheduled task,
 shell extension, or uninstaller is used. Remove GameVault by closing it and
