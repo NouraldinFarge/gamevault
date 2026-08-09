@@ -1,29 +1,94 @@
 name: Bug report
-description: Report a reproducible GameVault problem without sharing private content.
+description: Report a reproducible GameVault problem using only synthetic or redacted evidence.
 title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Never attach game archives, credentials, license keys, or personal library databases.
+      value: |
+        Thanks for helping improve GameVault. Never attach commercial games, private archives, credentials, license keys, personal library databases, or logs containing private paths.
+
+        Report path traversal, unsafe extraction, allowlist bypass, command injection, or credential exposure through [private vulnerability reporting](https://github.com/NouraldinFarge/gamevault/security/advisories/new), not a public issue.
+
   - type: input
     id: version
     attributes:
-      label: Version
-      placeholder: 0.3.2
+      label: GameVault version or commit
+      description: Use the release tag or short commit shown in the repository.
+      placeholder: v0.3.5 or a short commit SHA
     validations:
       required: true
-  - type: textarea
-    id: behavior
+
+  - type: dropdown
+    id: environment
     attributes:
-      label: What happened?
-      description: Include expected behavior and a safe, minimal reproduction.
+      label: Windows environment
+      options:
+        - Windows 11 x64
+        - Windows 10 x64
+        - Source build or CI
+        - Other or unknown
     validations:
       required: true
-  - type: textarea
-    id: safety
+
+  - type: dropdown
+    id: area
     attributes:
-      label: Safety context
-      description: State whether archive intake, path handling, promotion, or process launch was involved.
+      label: Affected area
+      options:
+        - Library and game details
+        - Local-files scanning
+        - ZIP intake and review
+        - Promotion, update, or rollback
+        - Game launch
+        - Official metadata
+        - Settings or portable paths
+        - Backup or restore
+        - Build or release tooling
+        - Accessibility or visual interface
+        - Other
     validations:
       required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include the exact visible error, with personal paths redacted.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Safe reproduction steps
+      description: Use synthetic folders, placeholder executables, or a tiny synthetic archive.
+      placeholder: |
+        1. Start GameVault from…
+        2. Open…
+        3. Choose a synthetic fixture…
+        4. Observe…
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add redacted diagnostics or screenshots only when they contain no personal paths or commercial content.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Submission safety
+      options:
+        - label: I removed personal paths, credentials, private archives, commercial game content, and license information.
+          required: true

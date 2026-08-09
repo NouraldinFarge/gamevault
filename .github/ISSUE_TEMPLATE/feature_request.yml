@@ -1,25 +1,64 @@
 name: Feature request
-description: Propose a bounded library, intake, or launch improvement.
+description: Propose a focused local-library, archive-review, portability, or accessibility improvement.
 title: "[Feature]: "
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: GameVault prioritizes explicit user control, portable local state, and review before extraction or execution.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Library organization
+        - Local-files scanning
+        - ZIP intake and review
+        - Portable state or migration
+        - Backup and recovery
+        - Official metadata
+        - Accessibility or keyboard use
+        - Build, release, or documentation
+        - Other
+    validations:
+      required: true
+
   - type: textarea
     id: problem
     attributes:
-      label: Problem to solve
+      label: User problem
+      description: Describe the workflow or limitation, not only the requested implementation.
     validations:
       required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What would become clearer, safer, faster, or more reliable for the user?
+    validations:
+      required: true
+
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed improvement
-    validations:
-      required: true
+      label: Proposed approach
+      description: Include alternatives or tradeoffs when relevant.
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Example or evidence
+      description: Use synthetic examples and redacted screenshots only.
+
   - type: checkboxes
     id: boundary
     attributes:
       label: Product boundary
       options:
-        - label: This request does not involve downloading, bypassing ownership checks, or silently executing game content.
+        - label: This request does not involve downloading games, bypassing ownership or platform controls, redistributing content, or silently executing archive contents.
+          required: true
+        - label: I understand that metadata must remain optional and restricted to approved official sources.
           required: true
 

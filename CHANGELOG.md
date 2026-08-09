@@ -4,6 +4,7 @@
 
 - Patch development-only PostCSS and Nano ID advisories and expand the required dependency workflow to audit the complete JavaScript graph.
 - Run the required dependency check on every pull request and describe hosted release builds as verified rather than bit-for-bit reproducible.
+- Refresh the GitHub presentation with current synthetic screenshots, a branded social preview, visitor-first product and safety evidence, clearer support routes, and stronger issue and pull-request forms.
 
 ## 0.3.5 - 2026-08-08
 
