@@ -56,5 +56,5 @@ jobs:
           version: 11.9.0
           run_install: false
 
-      - name: Audit production JavaScript lockfile
-        run: pnpm audit --prod
+      - name: Audit complete JavaScript lockfile
+        run: pnpm audit
