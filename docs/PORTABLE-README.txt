@@ -9,8 +9,9 @@ GameVault Portable
 
 ZIP intake:
   Place user-owned ZIP archives in library\Inbox beside the app (or the Inbox
-  under your selected managed folder). Local files can test,
-  extract, review, clean, and organize them without executing archive content.
+  under your selected managed folder). Local files preflight paths, links,
+  expanded size, and free space before testing, extracting, reviewing,
+  cleaning, and organizing them without executing archive content.
   Suspicious platform-modification markers block installation, and an existing
   game is backed up before a staged update is promoted.
 
@@ -25,6 +26,9 @@ All GameVault-controlled state remains in this folder:
   cache\   disposable cached data
   library\ managed Inbox, Staging, Games, Archives, Dependencies, Quarantine,
            and Reports folders (unless the user selects another location)
+
+Portable upgrades preserve data, library, user configuration, and logs. The
+new build is health-checked before the previous active build is removed.
 
 No installer, administrator rights, registry setup, service, scheduled task,
 shell extension, or uninstaller is used. Remove GameVault by closing it and

@@ -22,6 +22,7 @@ Assert-ChildPath -Path $backup -Parent (Join-Path $workspace 'temp') -Label 'act
 New-Item -ItemType Directory -Path $deployment -Force | Out-Null
 
 $activeMoved = $false
+$libraryMoved = $false
 try {
     Expand-Archive -LiteralPath $ArchivePath -DestinationPath $deployment
     $wrapper = @(Get-ChildItem -LiteralPath $deployment -Directory)
@@ -33,19 +34,16 @@ try {
         -PortableRoot $next `
         -ExpectedVersion $Version
 
-    if (Test-Path -LiteralPath (Join-Path $active 'data')) {
-        Copy-Item -LiteralPath (Join-Path $active 'data') -Destination $next -Recurse -Force
-    }
-    $userSettings = Join-Path $active 'config\settings.json'
-    if (Test-Path -LiteralPath $userSettings -PathType Leaf) {
-        Copy-Item -LiteralPath $userSettings -Destination (Join-Path $next 'config\settings.json') -Force
-    }
+    Copy-PortableUserState -ActiveRoot $active -NextRoot $next
 
     if (Test-Path -LiteralPath $active) {
         Move-Item -LiteralPath $active -Destination $backup
         $activeMoved = $true
     }
     Move-Item -LiteralPath $next -Destination $active
+    if ($activeMoved) {
+        $libraryMoved = Move-PortableLibraryState -PreviousRoot $backup -NextRoot $active
+    }
     Invoke-PortableHealthCheck -Executable (Join-Path $active 'GameVault.exe')
 
     if ($activeMoved -and (Test-Path -LiteralPath $backup)) {
@@ -53,6 +51,15 @@ try {
     }
 }
 catch {
+    if ($libraryMoved -and (Test-Path -LiteralPath (Join-Path $active 'library'))) {
+        if (Test-Path -LiteralPath (Join-Path $backup 'library')) {
+            throw 'Portable rollback stopped because both builds contain managed library data.'
+        }
+        Move-Item `
+            -LiteralPath (Join-Path $active 'library') `
+            -Destination (Join-Path $backup 'library')
+        $libraryMoved = $false
+    }
     if (Test-Path -LiteralPath $active) {
         Remove-Item -LiteralPath $active -Recurse -Force
     }

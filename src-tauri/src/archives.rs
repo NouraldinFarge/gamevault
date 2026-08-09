@@ -2,8 +2,10 @@ use crate::models::{
     ArchiveInspection, InboxArchive, InstallStagedInput, StagedArchive, StagedExecutableCandidate,
     StagedPackageAnalysis,
 };
+use crate::path_safety;
 use crate::scanner;
 use chrono::Utc;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::ErrorKind;
@@ -13,11 +15,27 @@ use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
 
 #[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_ARCHIVE_ENTRIES: usize = 100_000;
 const MAX_EXECUTABLE_CANDIDATES: usize = 20;
+const MAX_UNPACKED_SIZE_BYTES: u64 = 512 * 1024 * 1024 * 1024;
+const MAX_COMPRESSION_RATIO: u64 = 1_000;
+const MIN_FREE_SPACE_RESERVE_BYTES: u64 = 512 * 1024 * 1024;
+
+#[cfg(windows)]
+#[link(name = "Kernel32")]
+extern "system" {
+    fn GetDiskFreeSpaceExW(
+        directory_name: *const u16,
+        free_bytes_available: *mut u64,
+        total_bytes: *mut u64,
+        total_free_bytes: *mut u64,
+    ) -> i32;
+}
 
 #[derive(Debug)]
 pub struct PromotionResult {
@@ -30,47 +48,47 @@ pub struct PromotionResult {
     pub updated: bool,
     pub warnings: Vec<String>,
     pub report_path: PathBuf,
+    original_install_path: PathBuf,
+    cleanup_moves: Vec<CleanupMove>,
+}
+
+#[derive(Debug)]
+struct CleanupMove {
+    original_path: PathBuf,
+    moved_path: PathBuf,
 }
 
 #[derive(Debug)]
 struct ArchiveEntry {
     path: String,
     size: u64,
+    link_or_reparse: bool,
 }
 
 pub fn inspect(archive: &Path) -> Result<ArchiveInspection, String> {
     validate_archive(archive)?;
     let extractor = find_7zip()?;
-    let test = seven_zip(&extractor, ["t", "-bd", "-y", "-bso0", "-bsp0"], archive)?;
-    if !test.status.success() {
-        return Ok(ArchiveInspection {
-            archive_path: display_path(archive),
-            archive_name: archive_name(archive),
-            archive_size_bytes: fs::metadata(archive)
-                .map(|metadata| metadata.len())
-                .unwrap_or_default(),
-            valid: false,
-            extractor: extractor.to_string_lossy().to_string(),
-            file_count: 0,
-            unpacked_size_bytes: 0,
-            executable_candidates: Vec::new(),
-            warnings: vec!["7-Zip could not fully decompress and verify this archive.".to_string()],
-            can_stage: false,
-        });
-    }
-
     let listing = seven_zip(&extractor, ["l", "-slt", "-ba"], archive)?;
     if !listing.status.success() {
-        return Err("7-Zip verified the archive but could not list its contents.".to_string());
+        return Err("7-Zip could not list this archive for safety review.".to_string());
     }
     let entries = parse_listing(&String::from_utf8_lossy(&listing.stdout));
-    if entries.len() > MAX_ARCHIVE_ENTRIES {
-        return Err("The archive contains too many entries for safe staging.".to_string());
-    }
+    let archive_size_bytes = fs::metadata(archive)
+        .map(|metadata| metadata.len())
+        .unwrap_or_default();
+    let unpacked_size_bytes = entries
+        .iter()
+        .fold(0_u64, |total, entry| total.saturating_add(entry.size));
 
     let unsafe_paths = entries
         .iter()
         .filter(|entry| unsafe_archive_path(&entry.path))
+        .count();
+    let link_entries = entries.iter().filter(|entry| entry.link_or_reparse).count();
+    let mut normalized_paths = HashSet::new();
+    let path_collisions = entries
+        .iter()
+        .filter(|entry| !normalized_paths.insert(normalized_archive_key(&entry.path)))
         .count();
     let nested_archives = entries
         .iter()
@@ -100,9 +118,37 @@ pub fn inspect(archive: &Path) -> Result<ArchiveInspection, String> {
         .collect::<Vec<_>>();
 
     let mut warnings = Vec::new();
+    if entries.len() > MAX_ARCHIVE_ENTRIES {
+        warnings.push(format!(
+            "Blocked: the archive contains more than {MAX_ARCHIVE_ENTRIES} entries."
+        ));
+    }
     if unsafe_paths > 0 {
         warnings.push(format!(
             "Blocked: {unsafe_paths} archive paths could escape the staging folder."
+        ));
+    }
+    if link_entries > 0 {
+        warnings.push(format!(
+            "Blocked: {link_entries} archive entries are links or Windows reparse points."
+        ));
+    }
+    if path_collisions > 0 {
+        warnings.push(format!(
+            "Blocked: {path_collisions} archive paths collide on a case-insensitive Windows filesystem."
+        ));
+    }
+    if unpacked_size_bytes > MAX_UNPACKED_SIZE_BYTES {
+        warnings.push(format!(
+            "Blocked: expanded content exceeds the {} GiB intake limit.",
+            MAX_UNPACKED_SIZE_BYTES / 1024 / 1024 / 1024
+        ));
+    }
+    if archive_size_bytes > 0
+        && unpacked_size_bytes > archive_size_bytes.saturating_mul(MAX_COMPRESSION_RATIO)
+    {
+        warnings.push(format!(
+            "Blocked: the claimed expansion ratio exceeds {MAX_COMPRESSION_RATIO}:1."
         ));
     }
     if nested_archives > 0 {
@@ -134,19 +180,56 @@ pub fn inspect(archive: &Path) -> Result<ArchiveInspection, String> {
         warnings.push("No likely primary game executable was found.".to_string());
     }
 
+    let structurally_blocked = entries.len() > MAX_ARCHIVE_ENTRIES
+        || unsafe_paths > 0
+        || link_entries > 0
+        || path_collisions > 0
+        || unpacked_size_bytes > MAX_UNPACKED_SIZE_BYTES
+        || (archive_size_bytes > 0
+            && unpacked_size_bytes > archive_size_bytes.saturating_mul(MAX_COMPRESSION_RATIO));
+    if structurally_blocked {
+        return Ok(ArchiveInspection {
+            archive_path: display_path(archive),
+            archive_name: archive_name(archive),
+            archive_size_bytes,
+            valid: false,
+            extractor: extractor.to_string_lossy().to_string(),
+            file_count: entries.len(),
+            unpacked_size_bytes,
+            executable_candidates,
+            warnings,
+            can_stage: false,
+        });
+    }
+
+    let test = seven_zip(&extractor, ["t", "-bd", "-y", "-bso0", "-bsp0"], archive)?;
+    if !test.status.success() {
+        warnings.push("7-Zip could not fully decompress and verify this archive.".to_string());
+        return Ok(ArchiveInspection {
+            archive_path: display_path(archive),
+            archive_name: archive_name(archive),
+            archive_size_bytes,
+            valid: false,
+            extractor: extractor.to_string_lossy().to_string(),
+            file_count: entries.len(),
+            unpacked_size_bytes,
+            executable_candidates,
+            warnings,
+            can_stage: false,
+        });
+    }
+
     Ok(ArchiveInspection {
         archive_path: display_path(archive),
         archive_name: archive_name(archive),
-        archive_size_bytes: fs::metadata(archive)
-            .map(|metadata| metadata.len())
-            .unwrap_or_default(),
+        archive_size_bytes,
         valid: true,
         extractor: extractor.to_string_lossy().to_string(),
         file_count: entries.len(),
-        unpacked_size_bytes: entries.iter().map(|entry| entry.size).sum(),
+        unpacked_size_bytes,
         executable_candidates,
         warnings,
-        can_stage: unsafe_paths == 0,
+        can_stage: true,
     })
 }
 
@@ -155,14 +238,18 @@ pub fn stage(archive: &Path, managed_root: &Path) -> Result<StagedArchive, Strin
     if !inspection.valid || !inspection.can_stage {
         return Err("This archive did not pass the safe staging checks.".to_string());
     }
-    let staging_root = managed_root.join("Staging");
-    fs::create_dir_all(&staging_root).map_err(|error| error.to_string())?;
-    let staging_root = staging_root
-        .canonicalize()
-        .map_err(|error| error.to_string())?;
+    let staging_root = path_safety::ensure_managed_directory(managed_root, &["Staging"])?;
+    if available_space(&staging_root).is_some_and(|available| {
+        inspection.unpacked_size_bytes > available.saturating_sub(MIN_FREE_SPACE_RESERVE_BYTES)
+    }) {
+        return Err(
+            "The staging drive does not have enough free space for this archive plus the safety reserve."
+                .to_string(),
+        );
+    }
     let destination = staging_root.join(format!(
         "{}-{}",
-        clean_package_name(archive),
+        safe_staging_name(&clean_package_name(archive)),
         Utc::now().format("%Y%m%d-%H%M%S")
     ));
     if destination.exists() {
@@ -187,13 +274,13 @@ pub fn stage(archive: &Path, managed_root: &Path) -> Result<StagedArchive, Strin
         return Err("7-Zip could not extract the archive into Staging.".to_string());
     }
 
-    let files = WalkDir::new(&destination)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-        .take(MAX_ARCHIVE_ENTRIES)
-        .collect::<Vec<_>>();
+    let files = match collect_staged_files(&destination) {
+        Ok(files) => files,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&destination);
+            return Err(error);
+        }
+    };
     let executable_candidates = files
         .iter()
         .filter_map(|entry| {
@@ -215,11 +302,11 @@ pub fn stage(archive: &Path, managed_root: &Path) -> Result<StagedArchive, Strin
 }
 
 pub fn list_inbox(managed_root: &Path) -> Result<Vec<InboxArchive>, String> {
-    let inbox = managed_root.join("Inbox");
-    fs::create_dir_all(&inbox).map_err(|error| error.to_string())?;
+    let inbox = path_safety::ensure_managed_directory(managed_root, &["Inbox"])?;
     let mut archives = fs::read_dir(&inbox)
         .map_err(|error| error.to_string())?
         .filter_map(Result::ok)
+        .filter(|entry| !path_safety::is_link_or_reparse(&entry.path()))
         .filter(|entry| {
             entry
                 .file_type()
@@ -266,19 +353,22 @@ pub fn analyze_staged(
     let mut nested_archives = Vec::new();
     let mut suspicious_markers = Vec::new();
 
-    for entry in WalkDir::new(&canonical_staging)
+    for (index, item) in WalkDir::new(&canonical_staging)
         .follow_links(false)
         .into_iter()
-        .filter_map(Result::ok)
-        .take(MAX_ARCHIVE_ENTRIES)
+        .enumerate()
     {
+        if index > MAX_ARCHIVE_ENTRIES {
+            return Err("The staged package exceeds the safe entry limit.".to_string());
+        }
+        let entry = item.map_err(|error| format!("Staged content could not be read: {error}"))?;
         let path = entry.path();
         let relative = path
             .strip_prefix(&canonical_staging)
             .unwrap_or(path)
             .to_string_lossy()
             .to_string();
-        if entry.file_type().is_symlink() {
+        if entry.depth() > 0 && path_safety::is_link_or_reparse(path) {
             suspicious_markers.push(format!("{} (link/reparse point)", relative));
             continue;
         }
@@ -411,10 +501,9 @@ pub fn promote_staged(
         .map_err(|_| "The selected executable is outside the selected game root.".to_string())?
         .to_path_buf();
 
-    let games_root = managed_root.join("Games");
-    let updates_root = managed_root.join("Archives").join("Updates");
-    fs::create_dir_all(&games_root).map_err(|error| error.to_string())?;
-    fs::create_dir_all(&updates_root).map_err(|error| error.to_string())?;
+    let games_root = path_safety::ensure_managed_directory(managed_root, &["Games"])?;
+    let updates_root =
+        path_safety::ensure_managed_directory(managed_root, &["Archives", "Updates"])?;
     let destination = games_root.join(&title);
     let stamp = Utc::now().format("%Y%m%d-%H%M%S").to_string();
     let mut backup_path = None;
@@ -436,8 +525,15 @@ pub fn promote_staged(
 
     let installed_executable = destination.join(executable_relative);
     let mut warnings = analysis.warnings.clone();
-    let dependencies_path =
-        clean_redist_folders(&destination, managed_root, &title, &stamp, &mut warnings);
+    let mut cleanup_moves = Vec::new();
+    let dependencies_path = clean_redist_folders(
+        &destination,
+        managed_root,
+        &title,
+        &stamp,
+        &mut warnings,
+        &mut cleanup_moves,
+    );
     let extras_path = clean_package_extras(
         &destination,
         &staging_path,
@@ -445,6 +541,7 @@ pub fn promote_staged(
         &title,
         &stamp,
         &mut warnings,
+        &mut cleanup_moves,
     );
     let archived_package_path = archive_inbox_package(
         input.archive_path.as_deref().map(Path::new),
@@ -452,20 +549,9 @@ pub fn promote_staged(
         &title,
         &stamp,
         &mut warnings,
+        &mut cleanup_moves,
     );
-    let report_path = write_install_report(
-        managed_root,
-        &title,
-        &destination,
-        &installed_executable,
-        backup_path.as_deref(),
-        dependencies_path.as_deref(),
-        extras_path.as_deref(),
-        archived_package_path.as_deref(),
-        &warnings,
-    )?;
-
-    Ok(PromotionResult {
+    let mut result = PromotionResult {
         installed_path: destination,
         executable_path: installed_executable,
         updated: backup_path.is_some(),
@@ -474,27 +560,94 @@ pub fn promote_staged(
         extras_path,
         archived_package_path,
         warnings,
-        report_path,
-    })
+        report_path: PathBuf::new(),
+        original_install_path: install_root,
+        cleanup_moves,
+    };
+    result.report_path = match write_install_report(
+        managed_root,
+        &title,
+        &result.installed_path,
+        &result.executable_path,
+        result.backup_path.as_deref(),
+        result.dependencies_path.as_deref(),
+        result.extras_path.as_deref(),
+        result.archived_package_path.as_deref(),
+        &result.warnings,
+    ) {
+        Ok(path) => path,
+        Err(error) => {
+            let rollback_error = rollback_promotion(&result).err();
+            return Err(match rollback_error {
+                Some(rollback) => format!(
+                    "The install report could not be written ({error}); rollback was incomplete: {rollback}"
+                ),
+                None => format!("The install report could not be written: {error}"),
+            });
+        }
+    };
+
+    Ok(result)
 }
 
-pub fn rollback_promotion(result: &PromotionResult) {
-    if result.installed_path.is_dir() {
-        let _ = fs::remove_dir_all(&result.installed_path);
-    } else if result.installed_path.is_file() {
-        let _ = fs::remove_file(&result.installed_path);
+pub fn rollback_promotion(result: &PromotionResult) -> Result<(), String> {
+    let mut errors = Vec::new();
+    for moved in result.cleanup_moves.iter().rev() {
+        if !moved.moved_path.exists() {
+            continue;
+        }
+        if let Some(parent) = moved.original_path.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                errors.push(format!("cleanup parent restore failed: {error}"));
+                continue;
+            }
+        }
+        if moved.original_path.exists() {
+            errors.push(format!(
+                "cleanup restore target already exists: {}",
+                display_path(&moved.original_path)
+            ));
+            continue;
+        }
+        if let Err(error) = fs::rename(&moved.moved_path, &moved.original_path) {
+            errors.push(format!("cleanup restore failed: {error}"));
+        }
+    }
+    if result.installed_path.exists() {
+        if let Some(parent) = result.original_install_path.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                errors.push(format!("staging parent restore failed: {error}"));
+            }
+        }
+        if result.original_install_path.exists() {
+            errors.push("The original staging target already exists.".to_string());
+        } else if let Err(error) = fs::rename(&result.installed_path, &result.original_install_path)
+        {
+            errors.push(format!("staged game restore failed: {error}"));
+        }
     }
     if let Some(backup) = &result.backup_path {
-        let _ = fs::rename(backup, &result.installed_path);
+        if let Err(error) = fs::rename(backup, &result.installed_path) {
+            errors.push(format!("previous game restore failed: {error}"));
+        }
+    }
+    if !result.report_path.as_os_str().is_empty() && result.report_path.exists() {
+        if let Err(error) = fs::remove_file(&result.report_path) {
+            errors.push(format!("install report cleanup failed: {error}"));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
     }
 }
 
 fn validate_staging_path(staging_path: &Path, managed_root: &Path) -> Result<PathBuf, String> {
-    let staging_root = managed_root.join("Staging");
-    fs::create_dir_all(&staging_root).map_err(|error| error.to_string())?;
-    let staging_root = staging_root
-        .canonicalize()
-        .map_err(|error| error.to_string())?;
+    let staging_root = path_safety::ensure_managed_directory(managed_root, &["Staging"])?;
+    if path_safety::is_link_or_reparse(staging_path) {
+        return Err("The selected staging folder is a link or Windows reparse point.".to_string());
+    }
     let candidate = staging_path
         .canonicalize()
         .map_err(|_| "The selected staging folder is unavailable.".to_string())?;
@@ -530,6 +683,47 @@ fn candidate_install_root(executable: &Path, staging_root: &Path) -> PathBuf {
         .filter(|path| path.starts_with(staging_root))
         .unwrap_or(staging_root)
         .to_path_buf()
+}
+
+fn collect_staged_files(destination: &Path) -> Result<Vec<walkdir::DirEntry>, String> {
+    let mut files = Vec::new();
+    let mut entries_seen = 0_usize;
+    for item in WalkDir::new(destination).follow_links(false) {
+        let entry = item.map_err(|error| format!("Staged content could not be read: {error}"))?;
+        entries_seen += 1;
+        if entries_seen > MAX_ARCHIVE_ENTRIES + 1 {
+            return Err("Extracted content exceeds the safe entry limit.".to_string());
+        }
+        if entry.depth() > 0 && path_safety::is_link_or_reparse(entry.path()) {
+            return Err("Extracted content contains a link or Windows reparse point.".to_string());
+        }
+        if entry.file_type().is_file() {
+            files.push(entry);
+        }
+    }
+    Ok(files)
+}
+
+#[cfg(windows)]
+fn available_space(path: &Path) -> Option<u64> {
+    let wide = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let mut available = 0_u64;
+    let mut total = 0_u64;
+    let mut total_free = 0_u64;
+    // SAFETY: `wide` is a live, null-terminated Windows path and all output pointers
+    // reference initialized u64 values for the duration of the call.
+    let succeeded =
+        unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut available, &mut total, &mut total_free) };
+    (succeeded != 0).then_some(available)
+}
+
+#[cfg(not(windows))]
+fn available_space(_path: &Path) -> Option<u64> {
+    None
 }
 
 fn display_title(path: &Path) -> String {
@@ -569,17 +763,20 @@ fn safe_folder_name(value: &str) -> Result<String, String> {
         .chars()
         .take(80)
         .collect::<String>();
-    if cleaned.is_empty()
-        || matches!(
-            cleaned.to_ascii_uppercase().as_str(),
-            "CON" | "PRN" | "AUX" | "NUL"
-        )
-    {
+    if cleaned.is_empty() || is_reserved_windows_name(&cleaned) {
         return Err(
             "Enter a simple game title that is valid as a Windows folder name.".to_string(),
         );
     }
     Ok(cleaned)
+}
+
+fn safe_staging_name(value: &str) -> String {
+    safe_folder_name(value)
+        .unwrap_or_else(|_| "Package".to_string())
+        .chars()
+        .take(48)
+        .collect()
 }
 
 fn is_redist_dir_name(value: &str) -> bool {
@@ -655,6 +852,7 @@ fn clean_redist_folders(
     title: &str,
     stamp: &str,
     warnings: &mut Vec<String>,
+    cleanup_moves: &mut Vec<CleanupMove>,
 ) -> Option<PathBuf> {
     let paths = WalkDir::new(installed_root)
         .follow_links(false)
@@ -668,22 +866,29 @@ fn clean_redist_folders(
     if paths.is_empty() {
         return None;
     }
-    let destination_root = managed_root
-        .join("Dependencies")
-        .join("Bundled")
-        .join(title)
-        .join(stamp);
-    if let Err(error) = fs::create_dir_all(&destination_root) {
-        warnings.push(format!("Redistributables could not be separated: {error}"));
-        return None;
-    }
+    let destination_root = match path_safety::ensure_managed_directory(
+        managed_root,
+        &["Dependencies", "Bundled", title, stamp],
+    ) {
+        Ok(path) => path,
+        Err(error) => {
+            warnings.push(format!("Redistributables could not be separated: {error}"));
+            return None;
+        }
+    };
     let mut moved = 0;
     for value in paths {
         let source = PathBuf::from(value);
         let name = source.file_name().unwrap_or_else(|| OsStr::new("Redist"));
         let target = unique_destination(&destination_root.join(name));
         match fs::rename(&source, &target) {
-            Ok(()) => moved += 1,
+            Ok(()) => {
+                cleanup_moves.push(CleanupMove {
+                    original_path: source,
+                    moved_path: target,
+                });
+                moved += 1;
+            }
             Err(error) => warnings.push(format!(
                 "A redistributable folder stayed with the game because it could not be moved: {error}"
             )),
@@ -699,11 +904,19 @@ fn clean_package_extras(
     title: &str,
     stamp: &str,
     warnings: &mut Vec<String>,
+    cleanup_moves: &mut Vec<CleanupMove>,
 ) -> Option<PathBuf> {
-    let destination_root = managed_root
-        .join("Quarantine")
-        .join("Package Extras")
-        .join(format!("{title}-{stamp}"));
+    let destination_name = format!("{title}-{stamp}");
+    let destination_root = match path_safety::ensure_managed_directory(
+        managed_root,
+        &["Quarantine", "Package Extras", &destination_name],
+    ) {
+        Ok(path) => path,
+        Err(error) => {
+            warnings.push(format!("Package extras could not be quarantined: {error}"));
+            return None;
+        }
+    };
     let mut moved = 0;
     let files = WalkDir::new(installed_root)
         .follow_links(false)
@@ -720,14 +933,29 @@ fn clean_package_extras(
                 continue;
             }
         }
-        if fs::rename(&source, &target).is_ok() {
-            moved += 1;
+        match fs::rename(&source, &target) {
+            Ok(()) => {
+                cleanup_moves.push(CleanupMove {
+                    original_path: source,
+                    moved_path: target,
+                });
+                moved += 1;
+            }
+            Err(error) => warnings.push(format!(
+                "A package extra stayed with the game because it could not be moved: {error}"
+            )),
         }
     }
     if staging_path.exists() && fs::create_dir_all(&destination_root).is_ok() {
         let target = unique_destination(&destination_root.join("Package Wrapper"));
-        match fs::rename(staging_path, target) {
-            Ok(()) => moved += 1,
+        match fs::rename(staging_path, &target) {
+            Ok(()) => {
+                cleanup_moves.push(CleanupMove {
+                    original_path: staging_path.to_path_buf(),
+                    moved_path: target,
+                });
+                moved += 1;
+            }
             Err(error) if error.kind() == ErrorKind::NotFound => {}
             Err(error) => warnings.push(format!("Package wrapper cleanup was incomplete: {error}")),
         }
@@ -741,9 +969,10 @@ fn archive_inbox_package(
     title: &str,
     stamp: &str,
     warnings: &mut Vec<String>,
+    cleanup_moves: &mut Vec<CleanupMove>,
 ) -> Option<PathBuf> {
     let archive = archive.filter(|path| path.is_file())?;
-    let inbox = managed_root.join("Inbox").canonicalize().ok()?;
+    let inbox = path_safety::ensure_managed_directory(managed_root, &["Inbox"]).ok()?;
     let canonical_archive = archive.canonicalize().ok()?;
     if !canonical_archive.starts_with(&inbox) {
         return None;
@@ -752,14 +981,23 @@ fn archive_inbox_package(
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or("zip");
-    let root = managed_root.join("Archives").join("Imported");
-    if let Err(error) = fs::create_dir_all(&root) {
-        warnings.push(format!("The source ZIP stayed in Inbox: {error}"));
-        return None;
-    }
+    let root = match path_safety::ensure_managed_directory(managed_root, &["Archives", "Imported"])
+    {
+        Ok(path) => path,
+        Err(error) => {
+            warnings.push(format!("The source ZIP stayed in Inbox: {error}"));
+            return None;
+        }
+    };
     let target = unique_destination(&root.join(format!("{title}-{stamp}.{extension}")));
     match fs::rename(&canonical_archive, &target) {
-        Ok(()) => Some(target),
+        Ok(()) => {
+            cleanup_moves.push(CleanupMove {
+                original_path: canonical_archive,
+                moved_path: target.clone(),
+            });
+            Some(target)
+        }
         Err(error) => {
             warnings.push(format!("The source ZIP stayed in Inbox: {error}"));
             None
@@ -779,12 +1017,11 @@ fn write_install_report(
     archived_package_path: Option<&Path>,
     warnings: &[String],
 ) -> Result<PathBuf, String> {
-    let reports = managed_root.join("Reports");
-    fs::create_dir_all(&reports).map_err(|error| error.to_string())?;
-    let path = reports.join(format!(
+    let reports = path_safety::ensure_managed_directory(managed_root, &["Reports"])?;
+    let path = unique_destination(&reports.join(format!(
         "game-install-{}.json",
         Utc::now().format("%Y%m%d-%H%M%S")
-    ));
+    )));
     let report = serde_json::json!({
         "installedAt": Utc::now().to_rfc3339(),
         "title": title,
@@ -808,12 +1045,11 @@ fn write_staging_report(
     managed_root: &Path,
     mut staged: StagedArchive,
 ) -> Result<StagedArchive, String> {
-    let reports = managed_root.join("Reports");
-    fs::create_dir_all(&reports).map_err(|error| error.to_string())?;
-    let path = reports.join(format!(
+    let reports = path_safety::ensure_managed_directory(managed_root, &["Reports"])?;
+    let path = unique_destination(&reports.join(format!(
         "archive-intake-{}.json",
         Utc::now().format("%Y%m%d-%H%M%S")
-    ));
+    )));
     staged.report_path = path.to_string_lossy().to_string();
     let json = serde_json::to_vec_pretty(&staged).map_err(|error| error.to_string())?;
     fs::write(&path, json).map_err(|error| error.to_string())?;
@@ -882,25 +1118,40 @@ fn parse_listing(output: &str) -> Vec<ArchiveEntry> {
     let mut entries = Vec::new();
     let mut current_path: Option<String> = None;
     let mut current_size = 0_u64;
+    let mut current_link_or_reparse = false;
     for line in output.lines().chain(std::iter::once("")) {
         if let Some(value) = line.strip_prefix("Path = ") {
             if let Some(path) = current_path.take() {
                 entries.push(ArchiveEntry {
                     path,
                     size: current_size,
+                    link_or_reparse: current_link_or_reparse,
                 });
             }
             current_path = Some(value.to_string());
             current_size = 0;
+            current_link_or_reparse = false;
         } else if let Some(value) = line.strip_prefix("Size = ") {
             current_size = value.parse().unwrap_or_default();
+        } else if let Some(value) = line.strip_prefix("Attributes = ") {
+            current_link_or_reparse |= archive_attributes_are_link_or_reparse(value);
+        } else if ["Symbolic Link = ", "Hard Link = ", "Reparse Point = "]
+            .iter()
+            .any(|prefix| {
+                line.strip_prefix(prefix)
+                    .is_some_and(|value| !value.is_empty())
+            })
+        {
+            current_link_or_reparse = true;
         } else if line.is_empty() {
             if let Some(path) = current_path.take() {
                 entries.push(ArchiveEntry {
                     path,
                     size: current_size,
+                    link_or_reparse: current_link_or_reparse,
                 });
                 current_size = 0;
+                current_link_or_reparse = false;
             }
         }
     }
@@ -908,12 +1159,53 @@ fn parse_listing(output: &str) -> Vec<ArchiveEntry> {
 }
 
 fn unsafe_archive_path(value: &str) -> bool {
-    let path = Path::new(value);
-    path.is_absolute()
+    if value.is_empty()
+        || value.contains('\0')
         || value.starts_with(['\\', '/'])
-        || path
-            .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
+        || Path::new(value).is_absolute()
+    {
+        return true;
+    }
+    let windows_path = value.replace('/', "\\");
+    windows_path.split('\\').any(|component| {
+        component.is_empty()
+            || matches!(component, "." | "..")
+            || component.contains(':')
+            || component.ends_with([' ', '.'])
+            || is_reserved_windows_name(component)
+    }) || Path::new(value)
+        .components()
+        .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
+}
+
+fn archive_attributes_are_link_or_reparse(value: &str) -> bool {
+    let lower = value.trim().to_ascii_lowercase();
+    lower.starts_with('l') || lower.contains("reparse")
+}
+
+fn normalized_archive_key(value: &str) -> String {
+    value.replace('/', "\\").to_lowercase()
+}
+
+fn is_reserved_windows_name(value: &str) -> bool {
+    let stem = value
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches([' ', '.'])
+        .to_ascii_uppercase();
+    matches!(
+        stem.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$" | "CONIN$" | "CONOUT$"
+    ) || stem
+        .strip_prefix("COM")
+        .or_else(|| stem.strip_prefix("LPT"))
+        .is_some_and(|suffix| {
+            matches!(
+                suffix,
+                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+            )
+        })
 }
 
 fn has_extension(value: &str, extensions: &[&str]) -> bool {
@@ -1023,13 +1315,45 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].path, "Game/Game.exe");
         assert_eq!(entries[0].size, 42);
+        assert!(!entries[0].link_or_reparse);
+    }
+
+    #[test]
+    fn listing_parser_marks_links_and_reparse_entries() {
+        let entries = parse_listing(
+            "Path = Game/link.exe\nSize = 5\nAttributes = lrwxrwxrwx\nSymbolic Link = ../outside.exe\n",
+        );
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].link_or_reparse);
     }
 
     #[test]
     fn path_traversal_is_blocked() {
         assert!(unsafe_archive_path("../outside.exe"));
         assert!(unsafe_archive_path(r"C:\outside.exe"));
+        assert!(unsafe_archive_path(r"Game\..\outside.exe"));
+        assert!(unsafe_archive_path(r"Game\payload.exe:stream"));
+        assert!(unsafe_archive_path(r"Game\CON.txt"));
+        assert!(unsafe_archive_path(r"Game\name.\payload.exe"));
+        assert!(unsafe_archive_path(r"\\server\share\game.exe"));
         assert!(!unsafe_archive_path("Game/Game.exe"));
+    }
+
+    #[test]
+    fn windows_case_collisions_normalize_to_the_same_key() {
+        assert_eq!(
+            normalized_archive_key("Game/Bin/Game.exe"),
+            normalized_archive_key(r"game\bin\GAME.EXE")
+        );
+    }
+
+    #[test]
+    fn reserved_windows_folder_names_are_rejected() {
+        assert!(safe_folder_name("CON.txt").is_err());
+        assert!(safe_folder_name("LPT9").is_err());
+        assert!(safe_folder_name("COM¹.log").is_err());
+        assert!(safe_folder_name("CONOUT$").is_err());
+        assert!(safe_folder_name("A real game").is_ok());
     }
 
     #[test]
@@ -1128,5 +1452,43 @@ mod tests {
         assert!(analysis.blocked);
         assert!(!analysis.can_install);
         assert_eq!(analysis.suspicious_markers.len(), 1);
+    }
+
+    #[test]
+    fn promotion_rollback_restores_staging_cleanup_and_inbox_archive() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let managed = directory.path().join("GameVault");
+        let staging = managed.join("Staging").join("package-rollback");
+        let game = staging.join("Rollback Game");
+        fs::create_dir_all(game.join("Redist")).expect("redist");
+        fs::create_dir_all(managed.join("Inbox")).expect("inbox");
+        fs::write(game.join("RollbackGame.exe"), vec![0_u8; 1024]).expect("game");
+        fs::write(game.join("Redist").join("setup.exe"), b"fixture").expect("setup");
+        fs::write(game.join("source.url"), b"fixture").expect("shortcut");
+        let archive = managed.join("Inbox").join("Rollback Game.zip");
+        fs::write(&archive, b"fixture").expect("archive");
+
+        let analysis = analyze_staged(&staging, &managed).expect("analysis");
+        let selected = analysis.executable_candidates.first().expect("candidate");
+        let result = promote_staged(
+            &InstallStagedInput {
+                staging_path: analysis.staging_path.clone(),
+                executable_path: selected.executable_path.clone(),
+                title: "Rollback Game".to_string(),
+                archive_path: Some(archive.to_string_lossy().to_string()),
+            },
+            &managed,
+        )
+        .expect("promotion");
+        let report = result.report_path.clone();
+
+        rollback_promotion(&result).expect("rollback");
+
+        assert!(game.join("RollbackGame.exe").is_file());
+        assert!(game.join("Redist").join("setup.exe").is_file());
+        assert!(game.join("source.url").is_file());
+        assert!(archive.is_file());
+        assert!(!managed.join("Games").join("Rollback Game").exists());
+        assert!(!report.exists());
     }
 }

@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     name: Windows verification
@@ -35,6 +39,9 @@ jobs:
 
       - name: Verify TypeScript and React
         run: pnpm verify
+
+      - name: Audit production JavaScript dependencies
+        run: pnpm audit --prod
 
       - name: Verify Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check

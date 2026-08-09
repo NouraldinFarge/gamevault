@@ -2,8 +2,10 @@ mod app;
 mod archives;
 mod commands;
 mod dependencies;
+mod diagnostics;
 mod metadata;
 mod models;
+mod path_safety;
 mod scanner;
 mod storage;
 mod workspace;
@@ -14,6 +16,17 @@ use std::sync::Arc;
 pub fn run() -> Result<(), String> {
     let root = resolve_portable_root()?;
     let state = Arc::new(AppCore::new(root)?);
+    if let Ok(connection) = state.database.lock() {
+        let logging_enabled = storage::get_settings(&connection)
+            .map(|settings| settings.logging_enabled)
+            .unwrap_or(false);
+        let _ = diagnostics::record(
+            &state.portable_root,
+            logging_enabled,
+            "application.started",
+            "ok",
+        );
+    }
     tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![

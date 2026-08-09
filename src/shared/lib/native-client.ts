@@ -178,7 +178,7 @@ export const nativeClient = {
     if (!isDesktopRuntime()) {
       return {
         ok: true,
-        appVersion: "0.3.4",
+        appVersion: "0.3.5",
         portableRoot: mockSnapshot.portableRoot,
         databasePath: `${mockSnapshot.portableRoot}\\data\\library.db`,
         sqliteVersion: mockSnapshot.sqliteVersion,

@@ -5,8 +5,14 @@ use std::io::Read;
 use url::Url;
 
 const MAX_RESPONSE_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_URL_LENGTH: usize = 2_048;
+const MAX_METADATA_TEXT_LENGTH: usize = 20_000;
+const MAX_METADATA_ITEMS: usize = 64;
 
 pub fn lookup(input: &MetadataLookupInput) -> Result<GameMetadata, String> {
+    if input.identifier.trim().is_empty() || input.identifier.len() > MAX_URL_LENGTH {
+        return Err("Enter a supported official store identifier or URL.".to_string());
+    }
     match input.provider.trim().to_ascii_lowercase().as_str() {
         "steam" => lookup_steam(input.identifier.trim()),
         "gog" => lookup_store_page("gog", input.identifier.trim()),
@@ -20,6 +26,9 @@ pub fn validate_metadata(metadata: &GameMetadata) -> Result<(), String> {
         .provider
         .as_deref()
         .ok_or_else(|| "Metadata is missing its official provider.".to_string())?;
+    if !matches!(provider, "steam" | "gog" | "epic") {
+        return Err("Metadata names an unsupported official provider.".to_string());
+    }
     let store_url = metadata
         .store_url
         .as_deref()
@@ -27,11 +36,37 @@ pub fn validate_metadata(metadata: &GameMetadata) -> Result<(), String> {
     if !is_official_store_url(provider, store_url) {
         return Err("Metadata can be saved only from an approved official store URL.".to_string());
     }
+    let scalar_values = [
+        metadata.external_id.as_deref(),
+        metadata.title.as_deref(),
+        metadata.short_description.as_deref(),
+        metadata.release_date.as_deref(),
+        metadata.website.as_deref(),
+        metadata.minimum_requirements.as_deref(),
+        metadata.recommended_requirements.as_deref(),
+        metadata.fetched_at.as_deref(),
+    ];
+    if store_url.len() > MAX_URL_LENGTH
+        || scalar_values
+            .into_iter()
+            .flatten()
+            .any(|value| value.len() > MAX_METADATA_TEXT_LENGTH || value.contains('\0'))
+        || [&metadata.developers, &metadata.publishers, &metadata.genres]
+            .into_iter()
+            .any(|values| {
+                values.len() > MAX_METADATA_ITEMS
+                    || values
+                        .iter()
+                        .any(|value| value.len() > 500 || value.contains('\0'))
+            })
+    {
+        return Err("Official metadata exceeds the supported size or item limits.".to_string());
+    }
     for image in [metadata.cover_url.as_deref(), metadata.hero_url.as_deref()]
         .into_iter()
         .flatten()
     {
-        if !is_approved_image_url(provider, image) {
+        if image.len() > MAX_URL_LENGTH || !is_approved_image_url(provider, image) {
             return Err("The store returned artwork from an unapproved image host.".to_string());
         }
     }
@@ -70,7 +105,10 @@ fn lookup_steam(identifier: &str) -> Result<GameMetadata, String> {
     let app_id = steam_app_id(identifier)?;
     let endpoint =
         format!("https://store.steampowered.com/api/appdetails?appids={app_id}&cc=US&l=english");
-    let (_, body) = fetch_text(&endpoint)?;
+    let (effective_url, body) = fetch_text(&endpoint)?;
+    if !is_official_store_url("steam", &effective_url) {
+        return Err("Steam redirected metadata lookup to an unapproved host.".to_string());
+    }
     let response: Value = serde_json::from_str(&body)
         .map_err(|_| "Steam returned metadata in an unexpected format.".to_string())?;
     let item = response
@@ -352,7 +390,7 @@ fn is_approved_image_url(provider: &str, value: &str) -> bool {
         return false;
     }
     let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
-    match provider {
+    match provider.trim().to_ascii_lowercase().as_str() {
         "steam" => host == "steamstatic.com" || host.ends_with(".steamstatic.com"),
         "gog" => host == "gog-statics.com" || host.ends_with(".gog-statics.com"),
         "epic" => {
@@ -402,5 +440,28 @@ mod tests {
             "gog",
             "https://gog.com.example.test/game"
         ));
+        assert!(!is_approved_image_url(
+            "steam",
+            "https://steamstatic.com.example.test/cover.jpg"
+        ));
+    }
+
+    #[test]
+    fn metadata_save_validation_rejects_spoofed_or_oversized_values() {
+        let mut metadata = GameMetadata {
+            provider: Some("steam".to_string()),
+            store_url: Some("https://store.steampowered.com/app/440/".to_string()),
+            cover_url: Some(
+                "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/440/cover.jpg"
+                    .to_string(),
+            ),
+            ..GameMetadata::default()
+        };
+        assert!(validate_metadata(&metadata).is_ok());
+        metadata.provider = Some("Steam".to_string());
+        assert!(validate_metadata(&metadata).is_err());
+        metadata.provider = Some("steam".to_string());
+        metadata.genres = vec!["genre".to_string(); MAX_METADATA_ITEMS + 1];
+        assert!(validate_metadata(&metadata).is_err());
     }
 }

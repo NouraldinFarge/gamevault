@@ -37,6 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link
               key={to}
               to={to}
+              aria-label={label}
               className={styles.navLink}
               activeProps={{ className: styles.active }}
               activeOptions={{ exact: to === "/" }}

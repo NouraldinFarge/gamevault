@@ -1,9 +1,13 @@
 use crate::models::{Game, GameMetadata, LibraryStats, Settings, UpdateGameInput};
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension, Row};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+
+const APPLICATION_ID: i64 = 0x4756_4c54;
+const SCHEMA_VERSION: i64 = 2;
 
 pub const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS games (
@@ -25,8 +29,8 @@ CREATE TABLE IF NOT EXISTS games (
   updated_at TEXT NOT NULL,
   folder_modified_at INTEGER NOT NULL DEFAULT 0,
   content_signature TEXT NOT NULL DEFAULT '',
-  artwork_seed INTEGER NOT NULL DEFAULT 0
-  ,metadata_json TEXT NOT NULL DEFAULT '{}'
+  artwork_seed INTEGER NOT NULL DEFAULT 0,
+  metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_games_status ON games(detection_status);
 CREATE INDEX IF NOT EXISTS idx_games_title ON games(title);
@@ -48,6 +52,7 @@ CREATE TABLE IF NOT EXISTS scan_history (
 );
 
 PRAGMA user_version = 2;
+PRAGMA application_id = 1196837972;
 "#;
 
 #[derive(Debug, Clone)]
@@ -136,6 +141,14 @@ pub fn migrate_legacy_portability_defaults(
     let mut settings = get_settings(connection)?;
     let managed_root = portable_root.join("library");
     let games_root = managed_root.join("Games");
+    let previous_portable_root: Option<String> = connection
+        .query_row(
+            "SELECT value_json FROM settings WHERE key = 'portable_root'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| error.to_string())?;
     let managed_was_legacy = matches_legacy_default(&settings.managed_root);
     let mut migrated = false;
 
@@ -159,6 +172,42 @@ pub fn migrate_legacy_portability_defaults(
         migrated = true;
     }
 
+    if let Some(previous) = previous_portable_root
+        .as_deref()
+        .filter(|value| !paths_equal(value, portable_root))
+    {
+        let previous_managed = Path::new(previous).join("library");
+        let previous_games = previous_managed.join("Games");
+        if paths_equal(&settings.managed_root, &previous_managed) {
+            settings.managed_root = managed_root.to_string_lossy().to_string();
+            migrated = true;
+        }
+        for root in &mut settings.library_roots {
+            if paths_equal(root.as_str(), &previous_games) {
+                *root = games_root.to_string_lossy().to_string();
+                migrated = true;
+            }
+        }
+        let previous_games = previous_games.to_string_lossy().to_string();
+        let games_root_text = games_root.to_string_lossy().to_string();
+        connection
+            .execute(
+                "UPDATE games SET
+                   install_path = ?2 || substr(install_path, length(?1) + 1),
+                   executable_path = CASE
+                     WHEN lower(executable_path) = lower(?1)
+                       OR lower(executable_path) LIKE lower(?1 || '\\%')
+                     THEN ?2 || substr(executable_path, length(?1) + 1)
+                     ELSE executable_path
+                   END,
+                   updated_at = ?3
+                 WHERE lower(install_path) = lower(?1)
+                    OR lower(install_path) LIKE lower(?1 || '\\%')",
+                params![previous_games, games_root_text, Utc::now().to_rfc3339()],
+            )
+            .map_err(|error| error.to_string())?;
+    }
+
     if migrated {
         connection
             .execute(
@@ -171,7 +220,31 @@ pub fn migrate_legacy_portability_defaults(
         save_settings(connection, &settings)?;
     }
 
+    connection
+        .execute(
+            "INSERT INTO settings(key, value_json, updated_at)
+             VALUES('portable_root', ?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
+            params![
+                portable_root.to_string_lossy().to_string(),
+                Utc::now().to_rfc3339()
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+
     Ok(())
+}
+
+fn paths_equal(left: impl AsRef<Path>, right: impl AsRef<Path>) -> bool {
+    left.as_ref()
+        .to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .eq_ignore_ascii_case(
+            right
+                .as_ref()
+                .to_string_lossy()
+                .trim_end_matches(['\\', '/']),
+        )
 }
 
 fn matches_legacy_default(value: &str) -> bool {
@@ -200,7 +273,10 @@ fn ensure_schema_migrations(connection: &Connection) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
     connection
-        .pragma_update(None, "user_version", 2_i64)
+        .pragma_update(None, "user_version", SCHEMA_VERSION)
+        .map_err(|error| error.to_string())?;
+    connection
+        .pragma_update(None, "application_id", APPLICATION_ID)
         .map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -705,8 +781,9 @@ pub fn record_play_session(connection: &Connection, id: &str, seconds: u64) -> R
 pub fn create_backup(connection: &Connection, backups_dir: &Path) -> Result<PathBuf, String> {
     fs::create_dir_all(backups_dir).map_err(|error| error.to_string())?;
     let path = backups_dir.join(format!(
-        "GameVault-library-{}.db",
-        Utc::now().format("%Y%m%d-%H%M%S")
+        "GameVault-library-{}-{}.db",
+        Utc::now().format("%Y%m%d-%H%M%S"),
+        &Uuid::now_v7().to_string()[..8]
     ));
     connection
         .execute("VACUUM INTO ?1", [path.to_string_lossy().to_string()])
@@ -715,20 +792,27 @@ pub fn create_backup(connection: &Connection, backups_dir: &Path) -> Result<Path
 }
 
 pub fn restore_backup(connection: &mut Connection, backup_path: &Path) -> Result<(), String> {
-    let check =
-        Connection::open_with_flags(backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|error| error.to_string())?;
-    let has_games: i64 = check
+    let backup_path = backup_path
+        .canonicalize()
+        .map_err(|_| "The selected backup is unavailable.".to_string())?;
+    let main_path: String = connection
         .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='games'",
+            "SELECT file FROM pragma_database_list WHERE name = 'main'",
             [],
             |row| row.get(0),
         )
         .map_err(|error| error.to_string())?;
-    if has_games != 1 {
-        return Err("The selected file is not a GameVault backup.".to_string());
+    if Path::new(&main_path)
+        .canonicalize()
+        .ok()
+        .is_some_and(|path| {
+            path.to_string_lossy()
+                .eq_ignore_ascii_case(&backup_path.to_string_lossy())
+        })
+    {
+        return Err("Choose a backup rather than the active GameVault database.".to_string());
     }
-    drop(check);
+    let backup_has_metadata = validate_backup(&backup_path)?;
 
     connection
         .execute(
@@ -736,14 +820,7 @@ pub fn restore_backup(connection: &mut Connection, backup_path: &Path) -> Result
             [backup_path.to_string_lossy().to_string()],
         )
         .map_err(|error| error.to_string())?;
-    let backup_has_metadata: i64 = connection
-        .query_row(
-            "SELECT count(*) FROM pragma_table_info('games', 'restore_db') WHERE name = 'metadata_json'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or_default();
-    let metadata_columns = if backup_has_metadata == 1 {
+    let metadata_columns = if backup_has_metadata {
         ", metadata_json"
     } else {
         ""
@@ -769,8 +846,93 @@ pub fn restore_backup(connection: &mut Connection, backup_path: &Path) -> Result
          COMMIT;"
     );
     let result = connection.execute_batch(&restore_sql);
-    let _ = connection.execute_batch("DETACH DATABASE restore_db;");
-    result.map_err(|error| error.to_string())
+    if result.is_err() {
+        let _ = connection.execute_batch("ROLLBACK;");
+    }
+    let detach = connection.execute_batch("DETACH DATABASE restore_db;");
+    result.map_err(|error| error.to_string())?;
+    detach.map_err(|error| error.to_string())?;
+    ensure_schema_migrations(connection)
+}
+
+fn validate_backup(path: &Path) -> Result<bool, String> {
+    let check = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| "The selected file is not a readable SQLite database.".to_string())?;
+    let integrity: String = check
+        .query_row("PRAGMA integrity_check(1)", [], |row| row.get(0))
+        .map_err(|_| "The selected backup failed its SQLite integrity check.".to_string())?;
+    if integrity != "ok" {
+        return Err("The selected backup failed its SQLite integrity check.".to_string());
+    }
+    let application_id: i64 = check
+        .pragma_query_value(None, "application_id", |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    if !matches!(application_id, 0 | APPLICATION_ID) {
+        return Err("The selected database belongs to another application.".to_string());
+    }
+    let user_version: i64 = check
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    if user_version > SCHEMA_VERSION {
+        return Err("This backup was created by a newer GameVault schema.".to_string());
+    }
+
+    let game_columns = table_columns(&check, "games")?;
+    let required_game_columns = [
+        "id",
+        "title",
+        "description",
+        "install_path",
+        "executable_path",
+        "launch_args_json",
+        "tags_json",
+        "category",
+        "favorite",
+        "detection_status",
+        "detection_source",
+        "folder_size_bytes",
+        "last_played_at",
+        "playtime_seconds",
+        "added_at",
+        "updated_at",
+        "folder_modified_at",
+        "content_signature",
+        "artwork_seed",
+    ];
+    if !required_game_columns
+        .iter()
+        .all(|column| game_columns.contains(*column))
+    {
+        return Err("The selected file is not a compatible GameVault backup.".to_string());
+    }
+    let setting_columns = table_columns(&check, "settings")?;
+    if !["key", "value_json", "updated_at"]
+        .iter()
+        .all(|column| setting_columns.contains(*column))
+    {
+        return Err("The selected file is missing GameVault settings.".to_string());
+    }
+    let settings_json: String = check
+        .query_row(
+            "SELECT value_json FROM settings WHERE key = 'application'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|_| "The selected file is missing valid GameVault settings.".to_string())?;
+    serde_json::from_str::<Settings>(&settings_json)
+        .map_err(|_| "The selected file contains invalid GameVault settings.".to_string())?;
+    Ok(game_columns.contains("metadata_json"))
+}
+
+fn table_columns(connection: &Connection, table: &str) -> Result<HashSet<String>, String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| error.to_string())?;
+    rows.collect::<Result<HashSet<_>, _>>()
+        .map_err(|error| error.to_string())
 }
 
 fn artwork_seed(value: &str) -> u32 {
@@ -878,5 +1040,104 @@ mod tests {
                 .to_string_lossy()
                 .to_string()]
         );
+    }
+
+    #[test]
+    fn recorded_portable_root_moves_default_paths_but_preserves_custom_roots() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let old_root = directory.path().join("Old portable path");
+        let new_root = directory.path().join("Renamed portable path");
+        let database = directory.path().join("library.db");
+        let connection = open_portable_database(&database, &old_root).expect("database");
+        migrate_legacy_portability_defaults(&connection, &old_root).expect("record old root");
+        let old_game = old_root.join("library").join("Games").join("Move Game");
+        fs::create_dir_all(&old_game).expect("game directory");
+        let old_executable = old_game.join("MoveGame.exe");
+        fs::write(&old_executable, b"fixture").expect("game executable");
+        let game = register_imported_game(&connection, "Move Game", &old_game, &old_executable)
+            .expect("registered game");
+
+        migrate_legacy_portability_defaults(&connection, &new_root).expect("move root");
+        let settings = get_settings(&connection).expect("moved settings");
+        let moved = get_game(&connection, &game.id)
+            .expect("game lookup")
+            .expect("moved game");
+        assert_eq!(
+            PathBuf::from(settings.managed_root),
+            new_root.join("library")
+        );
+        assert_eq!(
+            PathBuf::from(moved.install_path),
+            new_root.join("library").join("Games").join("Move Game")
+        );
+        assert_eq!(
+            PathBuf::from(moved.executable_path),
+            new_root
+                .join("library")
+                .join("Games")
+                .join("Move Game")
+                .join("MoveGame.exe")
+        );
+
+        let custom = directory.path().join("Custom external library");
+        save_settings(
+            &connection,
+            &Settings {
+                managed_root: custom.to_string_lossy().to_string(),
+                library_roots: vec![custom.join("Games").to_string_lossy().to_string()],
+                ..settings
+            },
+        )
+        .expect("custom settings");
+        migrate_legacy_portability_defaults(&connection, &directory.path().join("Third path"))
+            .expect("preserve custom root");
+        let preserved = get_settings(&connection).expect("preserved settings");
+        assert_eq!(PathBuf::from(preserved.managed_root), custom);
+    }
+
+    #[test]
+    fn backup_restore_round_trip_preserves_games_and_settings() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let database = directory.path().join("library.db");
+        let mut connection = open_database(&database).expect("database");
+        let game_dir = directory.path().join("Backup Game");
+        fs::create_dir_all(&game_dir).expect("game dir");
+        let executable = game_dir.join("BackupGame.exe");
+        fs::write(&executable, b"fixture").expect("fixture");
+        let game = add_manual_game(&connection, &executable).expect("manual game");
+        let mut settings = get_settings(&connection).expect("settings");
+        settings.theme = "high-contrast".to_string();
+        save_settings(&connection, &settings).expect("save settings");
+        let backup =
+            create_backup(&connection, &directory.path().join("backups")).expect("create backup");
+
+        remove_game(&connection, &game.id).expect("remove game");
+        settings.theme = "midnight".to_string();
+        save_settings(&connection, &settings).expect("mutate settings");
+        restore_backup(&mut connection, &backup).expect("restore backup");
+
+        assert!(get_game(&connection, &game.id)
+            .expect("game lookup")
+            .is_some());
+        assert_eq!(
+            get_settings(&connection).expect("restored settings").theme,
+            "high-contrast"
+        );
+    }
+
+    #[test]
+    fn backup_restore_rejects_unrelated_or_active_databases() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let database = directory.path().join("library.db");
+        let mut connection = open_database(&database).expect("database");
+        let unrelated = directory.path().join("unrelated.db");
+        let unrelated_connection = Connection::open(&unrelated).expect("unrelated database");
+        unrelated_connection
+            .execute("CREATE TABLE games(id TEXT)", [])
+            .expect("unrelated schema");
+        drop(unrelated_connection);
+
+        assert!(restore_backup(&mut connection, &unrelated).is_err());
+        assert!(restore_backup(&mut connection, &database).is_err());
     }
 }

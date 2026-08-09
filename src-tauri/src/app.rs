@@ -1,3 +1,4 @@
+use crate::path_safety;
 use crate::storage;
 use rusqlite::Connection;
 use std::collections::HashSet;
@@ -49,13 +50,13 @@ pub fn ensure_portable_layout(root: &Path) -> Result<(), String> {
     for directory in [
         "assets", "config", "data", "logs", "cache", "runtime", "licenses",
     ] {
-        fs::create_dir_all(root.join(directory)).map_err(|error| error.to_string())?;
+        path_safety::ensure_managed_directory(root, &[directory])?;
     }
     Ok(())
 }
 
 pub fn clear_cache(root: &Path) -> Result<(), String> {
-    let cache = root.join("cache");
+    let cache = path_safety::ensure_managed_directory(root, &["cache"])?;
     if cache.parent() != Some(root)
         || cache.file_name().and_then(|value| value.to_str()) != Some("cache")
     {
@@ -69,8 +70,12 @@ pub fn clear_cache(root: &Path) -> Result<(), String> {
             return Err("Cache entry escaped the approved root.".to_string());
         }
         let file_type = entry.file_type().map_err(|error| error.to_string())?;
-        if file_type.is_symlink() {
-            fs::remove_file(&path).map_err(|error| error.to_string())?;
+        if path_safety::is_link_or_reparse(&path) {
+            if file_type.is_dir() {
+                fs::remove_dir(&path).map_err(|error| error.to_string())?;
+            } else {
+                fs::remove_file(&path).map_err(|error| error.to_string())?;
+            }
         } else if file_type.is_dir() {
             fs::remove_dir_all(&path).map_err(|error| error.to_string())?;
         } else {

@@ -1,4 +1,5 @@
 use crate::models::{DependencyAudit, DependencyItem};
+use crate::path_safety;
 use chrono::Utc;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -52,14 +53,18 @@ pub fn audit(managed_root: &Path) -> Result<DependencyAudit, String> {
     let mut candidate_files = Vec::new();
     let mut files_inspected = 0_usize;
 
-    for entry in WalkDir::new(managed_root)
+    for (index, item) in WalkDir::new(managed_root)
         .max_depth(10)
         .follow_links(false)
         .into_iter()
         .filter_entry(allowed_workspace_entry)
-        .filter_map(Result::ok)
-        .take(50_000)
+        .enumerate()
     {
+        if index >= 50_000 {
+            return Err("The dependency audit exceeded the safe entry limit.".to_string());
+        }
+        let entry =
+            item.map_err(|error| format!("Dependency folders could not be read: {error}"))?;
         if !entry.file_type().is_file() {
             continue;
         }
@@ -139,8 +144,7 @@ pub fn audit(managed_root: &Path) -> Result<DependencyAudit, String> {
             .values()
             .all(|status| status.as_str() == "reachable");
     let audited_at = Utc::now().to_rfc3339();
-    let reports = managed_root.join("Reports");
-    fs::create_dir_all(&reports).map_err(|error| error.to_string())?;
+    let reports = path_safety::ensure_managed_directory(managed_root, &["Reports"])?;
     let report_path = reports.join(format!(
         "dependency-audit-{}.json",
         Utc::now().format("%Y%m%d-%H%M%S")
@@ -177,8 +181,11 @@ pub fn is_approved_official_url(url: &str) -> bool {
 }
 
 fn allowed_workspace_entry(entry: &DirEntry) -> bool {
+    if entry.depth() > 0 && path_safety::is_link_or_reparse(entry.path()) {
+        return false;
+    }
     if entry.depth() != 1 || !entry.file_type().is_dir() {
-        return !entry.file_type().is_symlink();
+        return true;
     }
     let name = entry.file_name().to_string_lossy();
     !matches!(name.as_ref(), "Archives" | "Inbox" | "Staging")

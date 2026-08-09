@@ -1,4 +1,5 @@
 use crate::models::{WorkspaceFolder, WorkspaceStatus};
+use crate::path_safety;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -17,6 +18,11 @@ pub fn validate_managed_root(root: &Path) -> Result<PathBuf, String> {
     if !root.is_absolute() || root.parent().is_none() || root.components().count() < 2 {
         return Err("Choose a dedicated folder rather than a drive root.".to_string());
     }
+    if root.exists() && path_safety::is_link_or_reparse(root) {
+        return Err(
+            "Choose a physical folder rather than a link or Windows reparse point.".to_string(),
+        );
+    }
     Ok(root.to_path_buf())
 }
 
@@ -24,7 +30,7 @@ pub fn prepare(root: &Path) -> Result<WorkspaceStatus, String> {
     let root = validate_managed_root(root)?;
     fs::create_dir_all(&root).map_err(|error| error.to_string())?;
     for name in MANAGED_FOLDERS {
-        fs::create_dir_all(root.join(name)).map_err(|error| error.to_string())?;
+        path_safety::ensure_managed_directory(&root, &[*name])?;
     }
     status(&root)
 }

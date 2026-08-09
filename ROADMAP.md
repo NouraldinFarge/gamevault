@@ -4,10 +4,9 @@ GameVault prioritizes safe local ownership workflows over automated acquisition 
 
 ## Near term
 
-- Expand hostile-archive, path, and launch-boundary regression coverage.
 - Publish verified portable releases with checksums and concise release notes.
-- Improve review explanations for blocked or suspicious packages.
-- Improve backup, recovery, and library migration observability.
+- Add property-based/fuzz coverage for archive-listing and Windows-path normalization helpers.
+- Improve backup, recovery, and library migration observability in the interface.
 
 ## Later
 
@@ -20,4 +19,3 @@ GameVault prioritizes safe local ownership workflows over automated acquisition 
 - Downloading games, bypassing ownership or platform protections, or redistributing content.
 - Silent archive promotion or process execution.
 - Cloud accounts, remote telemetry, or a mandatory online launch dependency.
-

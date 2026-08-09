@@ -1,4 +1,5 @@
 use crate::models::ScanProgress;
+use crate::path_safety;
 use crate::storage::DetectedGame;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -89,6 +90,7 @@ where
         let mut folders = match fs::read_dir(&root) {
             Ok(entries) => entries
                 .filter_map(Result::ok)
+                .filter(|entry| !path_safety::is_link_or_reparse(&entry.path()))
                 .filter(|entry| entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
                 .filter(|entry| {
                     let name = entry.file_name().to_string_lossy().to_lowercase();
@@ -257,7 +259,7 @@ fn is_allowed_entry(entry: &DirEntry) -> bool {
     if entry.depth() == 0 {
         return true;
     }
-    if entry.file_type().is_symlink() {
+    if path_safety::is_link_or_reparse(entry.path()) {
         return false;
     }
     if entry.file_type().is_dir() {

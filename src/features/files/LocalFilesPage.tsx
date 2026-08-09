@@ -280,7 +280,7 @@ export function LocalFilesPage() {
           <div>
             <p className="eyebrow">Managed root</p>
             <h2>{settings.managedRoot}</h2>
-            <p>Downloads, staging, live games, dependencies, and reports remain separated.</p>
+            <p>Inbox packages, staging, live games, dependencies, and reports remain separated.</p>
           </div>
           <button
             className="button"
@@ -320,8 +320,8 @@ export function LocalFilesPage() {
             <p className="eyebrow">ZIP intake</p>
             <h2>Test before extraction</h2>
             <p>
-              Fully test a ZIP with 7-Zip, inspect its paths and contents, then extract only into
-              the short Staging folder.
+              Review ZIP paths, link metadata, and expanded size, then fully test with 7-Zip before
+              extracting only into the short Staging folder.
             </p>
           </div>
           <button

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.5 - 2026-08-08
+
+- Preflight ZIP structure before decompression testing; reject unsafe Windows paths, NTFS streams, device names, case collisions, link/reparse metadata, excessive expansion, and insufficient staging space.
+- Recheck extracted and managed trees for Windows reparse points and fail closed on unreadable or excessive entry sets.
+- Journal promotion cleanup so database-registration failure restores staged files, prerequisites, quarantined extras, source ZIPs, and previous installed versions.
+- Validate database backups with SQLite integrity, application/schema identity, compatible columns, and parseable settings before transactional restore.
+- Preserve `data`, `library`, user configuration, and logs during portable upgrades; migrate recorded default paths when the portable folder moves; create a pre-restore snapshot; and verify renamed executables and paths containing spaces.
+- Add bounded redacted local event logging, metadata/input limits, compact-navigation accessible names, and expanded hostile-input/rollback/backup/launch regression tests.
+- Update `rfd` and `wayland-scanner`, removing the vulnerable `quick-xml 0.39.4` and obsolete portal dependency chain; adopt the reviewed React type updates.
+
 ## 0.3.4 - 2026-08-01
 
 - Publish the verified dependency-maintenance build under a fresh immutable release tag.

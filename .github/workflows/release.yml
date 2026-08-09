@@ -10,6 +10,10 @@ permissions:
   id-token: write
   attestations: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build, attest, and publish portable release
@@ -33,6 +37,15 @@ jobs:
         with:
           version: 11.9.0
           run_install: false
+
+      - name: Confirm tag and version identity
+        working-directory: project/workspace
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw -LiteralPath VERSION).Trim()
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match VERSION $version."
+          }
 
       - name: Build and verify portable package
         working-directory: project/workspace

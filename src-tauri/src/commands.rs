@@ -5,7 +5,7 @@ use crate::models::{
     SaveGameMetadataInput, ScanResult, Settings, StagedArchive, StagedPackageAnalysis,
     UpdateGameInput, WorkspaceStatus,
 };
-use crate::{archives, dependencies, metadata, scanner, storage, workspace};
+use crate::{archives, dependencies, diagnostics, metadata, scanner, storage, workspace};
 use chrono::Utc;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -33,7 +33,24 @@ fn lock_error() -> CommandError {
     )
 }
 
+fn record_event(core: &AppCore, event: &str, outcome: &str) {
+    let enabled = core
+        .database
+        .lock()
+        .ok()
+        .and_then(|connection| storage::get_settings(&connection).ok())
+        .is_some_and(|settings| settings.logging_enabled);
+    let _ = diagnostics::record(&core.portable_root, enabled, event, outcome);
+}
+
 fn validate_executable(executable: &Path, install_path: &Path) -> Result<PathBuf, CommandError> {
+    if !install_path.is_dir() {
+        return Err(CommandError::new(
+            "launch.folder_unavailable",
+            "The game folder cannot be accessed.",
+            false,
+        ));
+    }
     if !executable.is_file() {
         return Err(CommandError::new(
             "launch.executable_missing",
@@ -258,6 +275,8 @@ pub fn save_settings(
     let connection = state.database.lock().map_err(|_| lock_error())?;
     storage::save_settings(&connection, &normalized)
         .map_err(|_| CommandError::internal("settings.save_failed"))?;
+    drop(connection);
+    record_event(state.inner(), "settings.saved", "ok");
     Ok(normalized)
 }
 
@@ -280,6 +299,23 @@ pub fn update_game(
     state: State<'_, Arc<AppCore>>,
 ) -> Result<Game, CommandError> {
     validate_arguments(&input.launch_args)?;
+    if input.title.trim().is_empty()
+        || input.title.len() > 200
+        || input.description.len() > 20_000
+        || input.category.len() > 100
+        || input.tags.len() > 64
+        || input.tags.iter().any(|tag| tag.len() > 100)
+        || [&input.title, &input.description, &input.category]
+            .into_iter()
+            .chain(input.tags.iter())
+            .any(|value| value.contains('\0'))
+    {
+        return Err(CommandError::new(
+            "library.metadata_invalid",
+            "Game details exceed the supported length or item limits.",
+            false,
+        ));
+    }
     let connection = state.database.lock().map_err(|_| lock_error())?;
     let existing = storage::get_game(&connection, &input.id)
         .map_err(|_| CommandError::internal("storage.game_read_failed"))?
@@ -372,6 +408,8 @@ pub fn launch_game(
         }
     };
 
+    record_event(state.inner(), "game.launch", "started");
+
     let core = Arc::clone(state.inner());
     std::thread::spawn(move || {
         let started = Instant::now();
@@ -383,6 +421,7 @@ pub fn launch_game(
         if let Ok(mut running) = core.running_games.lock() {
             running.remove(&id);
         }
+        record_event(&core, "game.launch", "completed");
         let _ = app.emit("library-changed", ());
     });
     Ok(())
@@ -445,6 +484,8 @@ pub fn create_database_backup(state: State<'_, Arc<AppCore>>) -> Result<String, 
         &state.portable_root.join("data").join("backups"),
     )
     .map_err(|_| CommandError::internal("storage.backup_failed"))?;
+    drop(connection);
+    record_event(state.inner(), "database.backup", "created");
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -468,14 +509,26 @@ pub fn restore_database_backup(
         ));
     }
     let mut connection = state.database.lock().map_err(|_| lock_error())?;
+    storage::create_backup(
+        &connection,
+        &state.portable_root.join("data").join("backups"),
+    )
+    .map_err(|_| CommandError::internal("storage.pre_restore_backup_failed"))?;
     storage::restore_backup(&mut connection, &path)
-        .map_err(|_| CommandError::internal("storage.restore_failed"))
+        .map_err(|_| CommandError::internal("storage.restore_failed"))?;
+    storage::migrate_legacy_portability_defaults(&connection, &state.portable_root)
+        .map_err(|_| CommandError::internal("storage.restore_migration_failed"))?;
+    drop(connection);
+    record_event(state.inner(), "database.backup", "restored");
+    Ok(())
 }
 
 #[tauri::command]
 pub fn clear_application_cache(state: State<'_, Arc<AppCore>>) -> Result<(), CommandError> {
     clear_cache(&state.portable_root)
-        .map_err(|_| CommandError::internal("storage.cache_clear_failed"))
+        .map_err(|_| CommandError::internal("storage.cache_clear_failed"))?;
+    record_event(state.inner(), "cache.cleared", "ok");
+    Ok(())
 }
 
 #[tauri::command]
@@ -719,14 +772,21 @@ pub async fn install_staged_package(
         ) {
             Ok(game) => game,
             Err(_) => {
-                archives::rollback_promotion(&promotion);
-                return Err(CommandError::internal(
-                    "archives.library_registration_failed",
-                ));
+                return match archives::rollback_promotion(&promotion) {
+                    Ok(()) => Err(CommandError::internal(
+                        "archives.library_registration_failed",
+                    )),
+                    Err(_) => Err(CommandError::new(
+                        "archives.rollback_incomplete",
+                        "The library registration failed and rollback was incomplete. Review the managed folders and Diagnostics before retrying.",
+                        false,
+                    )),
+                };
             }
         }
     };
     let _ = app.emit("library-changed", ());
+    record_event(state.inner(), "archive.install", "completed");
     Ok(InstalledPackage {
         game,
         installed_path: promotion.installed_path.to_string_lossy().to_string(),
@@ -785,4 +845,42 @@ pub fn open_official_store_search(provider: String, query: String) -> Result<(),
         )
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn launch_arguments_preserve_array_boundaries_and_enforce_limits() {
+        assert!(validate_arguments(&[
+            "--window title=Game Vault".to_string(),
+            "& whoami".to_string(),
+        ])
+        .is_ok());
+        assert!(validate_arguments(&vec!["argument".to_string(); 65]).is_err());
+        assert!(validate_arguments(&["bad\0argument".to_string()]).is_err());
+        assert!(validate_arguments(&["x".repeat(2049)]).is_err());
+    }
+
+    #[test]
+    fn executable_must_be_a_windows_binary_inside_a_real_game_folder() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let game = directory.path().join("Game with spaces");
+        let outside = directory.path().join("Outside");
+        fs::create_dir_all(&game).expect("game folder");
+        fs::create_dir_all(&outside).expect("outside folder");
+        let executable = game.join("Game.exe");
+        let text = game.join("Game.txt");
+        let outside_executable = outside.join("Outside.exe");
+        fs::write(&executable, b"fixture").expect("game executable");
+        fs::write(&text, b"fixture").expect("text file");
+        fs::write(&outside_executable, b"fixture").expect("outside executable");
+
+        assert!(validate_executable(&executable, &game).is_ok());
+        assert!(validate_executable(&text, &game).is_err());
+        assert!(validate_executable(&outside_executable, &game).is_err());
+        assert!(validate_executable(&executable, &executable).is_err());
+    }
 }

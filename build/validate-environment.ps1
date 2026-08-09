@@ -14,6 +14,7 @@ $requiredFiles = @(
     'assets\README.txt',
     'LICENSE',
     'src-tauri\Cargo.toml',
+    'rust-toolchain.toml',
     'src-tauri\tauri.conf.json',
     'src\main.tsx'
 )
