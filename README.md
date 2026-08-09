@@ -27,7 +27,7 @@
 
 <p align="center"><sub>Windows 10/11 x64 · Active 2026 portfolio project · Current release 0.3.5</sub></p>
 
-![GameVault home screen showing a portable offline collection](docs/images/gamevault-home.jpg)
+[![GameVault home screen showing a portable offline collection](docs/images/gamevault-home.jpg)](docs/images/gamevault-home.jpg)
 
 ## Why GameVault
 
@@ -42,12 +42,21 @@ Most launchers optimize acquisition and cloud services. GameVault focuses on a d
 
 ## Product tour
 
-| Search and organize offline | Review local files and archive intake |
-| --- | --- |
-| ![Searchable GameVault library grid with status and category filters](docs/images/gamevault-library.jpg) | ![GameVault Local Files screen with portable managed folders and review-gated ZIP intake](docs/images/gamevault-local-files.jpg) |
-| Filter titles, categories, status, favorites, and launch readiness without a network dependency. | Keep Inbox, Staging, Games, Dependencies, Quarantine, Archives, and Reports visibly separated. |
+### 1. Search and organize offline
+
+Filter titles, categories, status, favorites, and launch readiness without a network dependency.
+
+[![Searchable GameVault library grid with status and category filters](docs/images/gamevault-library.jpg)](docs/images/gamevault-library.jpg)
+
+### 2. Review local files and archive intake
+
+Keep Inbox, Staging, Games, Dependencies, Quarantine, Archives, and Reports visibly separated.
+
+[![GameVault Local Files screen with portable managed folders and review-gated ZIP intake](docs/images/gamevault-local-files.jpg)](docs/images/gamevault-local-files.jpg)
 
 All screenshots use synthetic game names and procedural artwork. No commercial game files, cover art, or private library data are included.
+
+Capture provenance, privacy rules, and refresh guidance are documented in [`docs/images/README.md`](docs/images/README.md).
 
 ## Safety model
 
@@ -112,7 +121,12 @@ Rust owns filesystem, process, SQLite, archive, URL, and metadata authority. The
 3. Verify the archive, extract it to a writable folder, and start `GameVault.exe`.
 
 ```powershell
-Get-FileHash .\GameVault-v0.3.5-windows-x64-portable.zip -Algorithm SHA256
+$archive = ".\GameVault-v0.3.5-windows-x64-portable.zip"
+$expected = ((Get-Content -LiteralPath "$archive.sha256" -Raw).Trim() -split '\s+')[0].ToLowerInvariant()
+if ($expected -notmatch '^[0-9a-f]{64}$') { throw "GameVault checksum file is invalid" }
+$actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "GameVault archive checksum mismatch" }
+"Verified SHA-256: $actual"
 ```
 
 Microsoft Edge WebView2 is required to display the desktop interface. An installed 7-Zip copy is required only for ZIP intake. The portable executable is not yet Authenticode-signed, so verify the published checksum and GitHub provenance before running it.

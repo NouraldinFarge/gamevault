@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "docs:check": "node scripts/check-documentation.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "biome check src && tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
-    "verify": "pnpm check && pnpm test && pnpm build"
+    "verify": "pnpm docs:check && pnpm check && pnpm test && pnpm build"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",
