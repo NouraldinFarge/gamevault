@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Patch development-only PostCSS and Nano ID advisories and expand the required dependency workflow to audit the complete JavaScript graph.
+- Run the required dependency check on every pull request and describe hosted release builds as verified rather than bit-for-bit reproducible.
 
 ## 0.3.5 - 2026-08-08
 

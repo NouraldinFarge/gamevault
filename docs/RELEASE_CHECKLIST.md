@@ -37,5 +37,6 @@ Run `BUILD-LATEST.ps1`. It must produce an installer-free x64 portable ZIP, vali
 - Confirm the release points to the intended commit and is neither a draft nor a prerelease.
 - Download the published checksum and ZIP; verify the SHA-256 value and the single versioned top-level folder.
 - Verify the GitHub artifact attestation, release assets, CI, CodeQL, and repository default branch.
+- Treat the hosted asset checksum and provenance as authoritative. ZIP timestamps are not normalized yet, so separate local and hosted builds are not claimed to be byte-for-byte reproducible.
 - Confirm the README version/download link, About description, homepage, topics, and portfolio links are current.
 - Confirm the local worktree is clean and `main` exactly matches `origin/main`.

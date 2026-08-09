@@ -1,4 +1,4 @@
-name: Reproducible Windows release
+name: Verified Windows release
 
 on:
   push:

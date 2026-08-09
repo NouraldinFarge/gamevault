@@ -11,13 +11,6 @@ on:
       - rust-toolchain.toml
       - .github/workflows/dependency-audit.yml
   pull_request:
-    paths:
-      - package.json
-      - pnpm-lock.yaml
-      - src-tauri/Cargo.toml
-      - src-tauri/Cargo.lock
-      - rust-toolchain.toml
-      - .github/workflows/dependency-audit.yml
   schedule:
     - cron: "17 8 * * 1"
   workflow_dispatch:
