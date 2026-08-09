@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Patch development-only PostCSS and Nano ID advisories and expand the required dependency workflow to audit the complete JavaScript graph.
+
 ## 0.3.5 - 2026-08-08
 
 - Preflight ZIP structure before decompression testing; reject unsafe Windows paths, NTFS streams, device names, case collisions, link/reparse metadata, excessive expansion, and insufficient staging space.

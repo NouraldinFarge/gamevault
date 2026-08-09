@@ -16,6 +16,7 @@ pnpm verify
 cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --locked
+pnpm audit
 pnpm audit --prod
 cargo audit --file src-tauri/Cargo.lock
 pwsh -NoProfile -File build/test-portable-scripts.ps1 -WorkspaceRoot (Get-Location)

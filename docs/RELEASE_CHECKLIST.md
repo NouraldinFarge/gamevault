@@ -13,6 +13,7 @@ Use this checklist from a clean `main` checkout. Existing immutable tags and rel
 
 ```powershell
 pnpm install --frozen-lockfile
+pnpm audit
 pnpm audit --prod
 pnpm verify
 cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
