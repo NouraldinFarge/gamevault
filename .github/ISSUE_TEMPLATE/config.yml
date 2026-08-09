@@ -1,6 +1,9 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Download and setup guide
+    url: https://github.com/NouraldinFarge/gamevault#download-and-run
+    about: Verify the portable release, prerequisites, and first-run steps.
   - name: Private security report
     url: https://github.com/NouraldinFarge/gamevault/security/advisories/new
-    about: Report archive, path, or process-launch vulnerabilities privately.
+    about: Report archive, path, metadata, backup, or process-launch vulnerabilities privately.
 

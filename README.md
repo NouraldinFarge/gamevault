@@ -1,103 +1,154 @@
-# GameVault
+<p align="center">
+  <img src="assets/gamevault-icon.png" width="96" alt="GameVault controller icon" />
+</p>
 
-[![CI](https://github.com/NouraldinFarge/gamevault/actions/workflows/ci.yml/badge.svg)](https://github.com/NouraldinFarge/gamevault/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/NouraldinFarge/gamevault/actions/workflows/codeql.yml/badge.svg)](https://github.com/NouraldinFarge/gamevault/actions/workflows/codeql.yml)
-[![Dependency audit](https://github.com/NouraldinFarge/gamevault/actions/workflows/dependency-audit.yml/badge.svg)](https://github.com/NouraldinFarge/gamevault/actions/workflows/dependency-audit.yml)
-[![Release](https://img.shields.io/github/v/release/NouraldinFarge/gamevault)](https://github.com/NouraldinFarge/gamevault/releases)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h1 align="center">GameVault</h1>
 
-**A portable, local-first Windows game library and launcher with a review-gated archive intake pipeline.**
+<p align="center"><strong>A portable, local-first Windows game library with a review-gated archive intake pipeline.</strong></p>
 
-Active development · 2026 · Version 0.3.5
+<p align="center">
+  Organize and launch games you already own, review untrusted ZIPs before they enter your library, and keep your catalog portable without an account, telemetry, or a mandatory cloud service.
+</p>
 
-GameVault organizes games the user already owns. It never downloads games and never treats an archive as trusted input. ZIPs move through a staged review workflow before they can enter the managed library, while official store pages can supply optional catalog metadata without becoming a launch dependency.
+<p align="center">
+  <a href="https://github.com/NouraldinFarge/gamevault/releases/latest"><strong>Download for Windows</strong></a>
+  · <a href="#safety-model">Safety model</a>
+  · <a href="#build-and-verify">Build from source</a>
+  · <a href="https://nouraldin-farge-engineering.awdsqecxzr.chatgpt.site">Engineering portfolio</a>
+</p>
 
-**Try it:** [Download the latest verified Windows release](https://github.com/NouraldinFarge/gamevault/releases/latest) · [Review source](https://github.com/NouraldinFarge/gamevault) · [View Nouraldin Farge's engineering portfolio](https://nouraldin-farge-engineering.awdsqecxzr.chatgpt.site) · [Read the archive-safety boundary](SECURITY.md)
+<p align="center">
+  <a href="https://github.com/NouraldinFarge/gamevault/actions/workflows/ci.yml"><img src="https://github.com/NouraldinFarge/gamevault/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://github.com/NouraldinFarge/gamevault/actions/workflows/codeql.yml"><img src="https://github.com/NouraldinFarge/gamevault/actions/workflows/codeql.yml/badge.svg" alt="CodeQL status" /></a>
+  <a href="https://github.com/NouraldinFarge/gamevault/actions/workflows/dependency-audit.yml"><img src="https://github.com/NouraldinFarge/gamevault/actions/workflows/dependency-audit.yml/badge.svg" alt="Dependency audit status" /></a>
+  <a href="https://github.com/NouraldinFarge/gamevault/releases/latest"><img src="https://img.shields.io/github/v/release/NouraldinFarge/gamevault" alt="Latest release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
+</p>
 
-## Product preview
+<p align="center"><sub>Windows 10/11 x64 · Active 2026 portfolio project · Current release 0.3.5</sub></p>
 
-![GameVault local library](docs/images/gamevault-library.jpg)
+![GameVault home screen showing a portable offline collection](docs/images/gamevault-home.jpg)
 
-| Review-oriented local files | Searchable library |
+## Why GameVault
+
+Most launchers optimize acquisition and cloud services. GameVault focuses on a different problem: maintaining a clean, portable view of locally stored games while treating every archive and saved path as untrusted input.
+
+| What GameVault does | What it deliberately does not do |
 | --- | --- |
-| ![Local-files intake and managed folders](docs/images/gamevault-local-files.jpg) | ![Offline library grid](docs/images/gamevault-library-grid.jpg) |
+| Indexes and launches local games the user already owns | Download, redistribute, crack, or patch games |
+| Preflights, integrity-tests, stages, and presents ZIP findings for review | Silently extract, promote, or execute archive content |
+| Keeps SQLite state and the managed `library/` beside the portable executable by default | Require an account, telemetry, or a cloud connection to launch |
+| Enriches catalog entries from strictly approved official Steam, GOG, and Epic URLs | Claim ownership, antivirus scanning, sandboxing, or guaranteed archive safety |
+
+## Product tour
+
+| Search and organize offline | Review local files and archive intake |
+| --- | --- |
+| ![Searchable GameVault library grid with status and category filters](docs/images/gamevault-library.jpg) | ![GameVault Local Files screen with portable managed folders and review-gated ZIP intake](docs/images/gamevault-local-files.jpg) |
+| Filter titles, categories, status, favorites, and launch readiness without a network dependency. | Keep Inbox, Staging, Games, Dependencies, Quarantine, Archives, and Reports visibly separated. |
+
+All screenshots use synthetic game names and procedural artwork. No commercial game files, cover art, or private library data are included.
+
+## Safety model
 
 ```mermaid
 flowchart LR
-    A["User-owned ZIP"] --> B["Structural preflight"]
-    B --> C["7-Zip integrity test"]
-    C --> D["Isolated staging"]
-    D --> E["Path, link, marker, and executable review"]
-    E --> F{"Explicit approval"}
-    F -->|Approve| G["Managed local library"]
-    F -->|Reject| H["Quarantine or cleanup"]
+    ZIP["User-owned ZIP"] --> LIST["Structural preflight"]
+    LIST --> TEST["7-Zip integrity test"]
+    TEST --> STAGE["Isolated staging"]
+    STAGE --> REVIEW["Findings and executable review"]
+    REVIEW --> APPROVE{"Explicit approval"}
+    APPROVE -->|Approve| LIB["Managed local library"]
+    APPROVE -->|Reject| HOLD["Quarantine or cleanup"]
 ```
 
-## What it demonstrates
+Before extraction, GameVault inspects entry count, expanded size, compression ratio, Windows paths, NTFS streams, device names, case collisions, and link/reparse metadata. Structurally safe archives are then fully tested with 7-Zip and extracted only into a unique staging directory.
 
-- **Defensive archive handling:** reject unsafe paths, Windows device names, NTFS streams, case collisions, links/reparse points, and expansion bombs before decompression testing or extraction.
-- **Review before execution:** stage content, inspect the detected executable and safety markers, then require explicit approval before promotion.
-- **Portable local state:** keep the app database, configuration, and managed `library/` folder beside the executable by default, while allowing the user to choose another dedicated location.
-- **Failure-tolerant enrichment:** allowlist Steam, GOG, and Epic product/artwork URLs while ensuring metadata failures never block local launch.
-- **Rust desktop authority:** place filesystem, process, and SQLite operations behind a narrow Tauri command boundary.
+- Path traversal, absolute or drive-relative paths, links/reparse points, unsafe Windows names, excessive expansion, and modified-platform markers block intake or promotion.
+- Nested archives remain sealed and are never recursively expanded.
+- Archive content is never executed during inspection.
+- Promotion requires explicit review and uses a rollback journal that can restore staging, separated prerequisites, the Inbox ZIP, and a previous installed version.
+- Runtime DLLs remain with their game; GameVault does not perform unsafe cross-game deduplication.
 
-## Managed ZIP workflow
+Read the complete [security policy](SECURITY.md) and [architecture trust boundaries](docs/ARCHITECTURE.md).
 
-1. Place a user-owned ZIP in the configured inbox.
-2. Preflight entry count, expanded size, compression ratio, Windows paths, case collisions, and link metadata.
-3. Fully test the structurally safe archive with 7-Zip, then extract it into a unique staging directory without running any content.
-4. Review the proposed executable, redistributables, nested archives, and safety findings.
-5. Approve promotion into the managed games directory.
-6. Retain update backups, separate bundled prerequisites, and quarantine wrapper extras.
+## Evidence, not promises
 
-Modified-platform markers, path traversal, and link/reparse entries block installation. Game runtime DLLs are intentionally not deduplicated or stripped.
+| Evidence | Current repository gate |
+| --- | --- |
+| Frontend behavior | TypeScript validation, production build, and 5 Vitest tests |
+| Native authority | Rust formatting, Clippy with warnings denied, and 35 Rust tests |
+| Hostile inputs | Traversal, device names, NTFS streams, case collisions, links/reparse points, allowlist lookalikes, rollback, backup restore, and launch-boundary regression tests |
+| Portable runtime | Renamed-executable, path-with-spaces, portable-database, state-preservation, health-check, and no-installer probes |
+| Supply chain | Full JavaScript and Rust audits, CodeQL, immutable action pins, SHA-256 checksum, SPDX SBOM, and GitHub SLSA provenance |
 
-## Product highlights
-
-- Searchable local library with launch history and per-game details.
-- Review-oriented local-files inbox and staged promotion flow.
-- Official catalog linking for Steam App IDs and approved Steam, GOG, or Epic URLs.
-- Portable executable and ZIP release; no installer target.
-- Browser-safe preview data for fast UI development.
+See the latest [GitHub Actions results](https://github.com/NouraldinFarge/gamevault/actions) and the immutable [v0.3.5 release](https://github.com/NouraldinFarge/gamevault/releases/tag/v0.3.5).
 
 ## Architecture
 
-| Layer | Responsibility |
-| --- | --- |
-| `src` | React 19 UI, library, local-files, settings, and shared components |
-| `src-tauri/src` | Rust filesystem, process, archive-review, SQLite, and metadata authority |
-| `tests` | Product behavior and boundary regression coverage |
-| `docs` | Design and operating guidance |
-| `BUILD-LATEST.ps1` | Verified portable release workflow |
+```mermaid
+flowchart LR
+    UI["React interface"] -->|typed Tauri commands| RUST["Rust authority"]
+    RUST --> DB["Portable SQLite"]
+    RUST --> FS["Managed filesystem"]
+    RUST --> PROC["Validated process launch"]
+    RUST --> META["Allowlisted official metadata"]
+    PREVIEW["Browser preview"] -->|synthetic data only| UI
+```
 
-## Run locally
+Rust owns filesystem, process, SQLite, archive, URL, and metadata authority. The React browser preview has synthetic data and no native filesystem capability.
+
+| Area | Responsibility |
+| --- | --- |
+| [`src`](src) | React 19 interface, library, local-files, settings, and shared components |
+| [`src-tauri/src`](src-tauri/src) | Rust archive review, path safety, process launch, SQLite, metadata, and recovery |
+| [`tests`](tests) | Synthetic product and trust-boundary fixtures |
+| [`build`](build) | Portable staging, verification, packaging, deployment, and rollback scripts |
+
+## Download and run
+
+1. Open the [latest release](https://github.com/NouraldinFarge/gamevault/releases/latest).
+2. Download `GameVault-v0.3.5-windows-x64-portable.zip` and its `.sha256` file.
+3. Verify the archive, extract it to a writable folder, and start `GameVault.exe`.
+
+```powershell
+Get-FileHash .\GameVault-v0.3.5-windows-x64-portable.zip -Algorithm SHA256
+```
+
+Microsoft Edge WebView2 is required to display the desktop interface. An installed 7-Zip copy is required only for ZIP intake. The portable executable is not yet Authenticode-signed, so verify the published checksum and GitHub provenance before running it.
+
+## Build and verify
 
 Prerequisites: Windows 10/11, Node.js 24, pnpm 11, the pinned Rust 1.96 MSVC toolchain, Visual Studio C++ Build Tools, 7-Zip, and Microsoft Edge WebView2.
 
 ```powershell
-pnpm install
-pnpm dev
+pnpm install --frozen-lockfile
 pnpm verify
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo run --manifest-path src-tauri/Cargo.toml
+cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-`pnpm dev` uses browser-safe preview data. Running through Cargo starts the full desktop authority.
+Use `pnpm dev` for the synthetic browser preview or `cargo run --manifest-path src-tauri/Cargo.toml` for the complete Tauri desktop authority. Double-click `BUILD-LATEST.bat` to run the installer-free portable release pipeline.
 
-## Portable release
+## Project guide
 
-Double-click `BUILD-LATEST.bat` to run the release pipeline and produce a portable executable and ZIP. The project deliberately does not configure installer bundle targets.
-
-Fresh installs create the managed game-library layout under `library/` beside the portable executable. Upgrades preserve `data/`, `library/`, logs, and user configuration transactionally, migrate the former forced `E:\GameVault` and `E:\SteamRIPPED` defaults, and leave deliberately chosen custom folders intact.
-
-Future version tags are built on GitHub's Windows runner from the tagged source. That workflow publishes the portable ZIP, SHA-256 checksum, SPDX SBOM, and GitHub artifact-provenance attestation.
+| Document | Start here when you want to… |
+| --- | --- |
+| [Architecture](docs/ARCHITECTURE.md) | Understand native authority, portable state, and recovery |
+| [Security policy](SECURITY.md) | Review trust boundaries or report a vulnerability privately |
+| [Release checklist](docs/RELEASE_CHECKLIST.md) | Reproduce the verified release process |
+| [Contributing](CONTRIBUTING.md) | Propose and verify a safe change |
+| [Support](SUPPORT.md) | Choose the right path for setup help, bugs, ideas, or security reports |
+| [Community standards](CODE_OF_CONDUCT.md) | Understand the behavior expected in project spaces |
+| [Dependency policy](DEPENDENCY_POLICY.md) | Understand update and audit decisions |
+| [Roadmap](ROADMAP.md) | See completed foundations, next work, and non-goals |
+| [Changelog](CHANGELOG.md) | Review version-by-version product changes |
 
 ## Development approach
 
-AI tools supported research, code generation, debugging, documentation, and testing. Nouraldin Farge made the final architecture, security, and release decisions, reviewed the generated work, and remains accountable for the result. Generated suggestions were treated as untrusted until reviewed against synthetic hostile-input fixtures and automated verification.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md), [`ROADMAP.md`](ROADMAP.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), and [`SECURITY.md`](SECURITY.md) for the design, verification, and project policies.
+AI tools supported research, implementation, debugging, documentation, and testing. Nouraldin Farge retained ownership of product direction, architecture, technical review, archive-safety boundaries, verification, release decisions, and published claims. Generated suggestions were treated as untrusted until reviewed against synthetic hostile-input fixtures and automated verification.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+GameVault is available under the [MIT License](LICENSE).

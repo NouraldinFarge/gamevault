@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title description">
+  <title id="title">GameVault social preview</title>
+  <desc id="description">Portable, local-first Windows game library with review-gated archive intake.</desc>
+  <defs>
+    <linearGradient id="page" x1="40" y1="20" x2="1230" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07101f"/>
+      <stop offset="0.55" stop-color="#0a1426"/>
+      <stop offset="1" stop-color="#101a31"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="90" y1="90" x2="350" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172b4c"/>
+      <stop offset="1" stop-color="#08101f"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="130" y1="155" x2="315" y2="325" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#69ddff"/>
+      <stop offset="1" stop-color="#2783e8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(1110 80) rotate(126) scale(550 620)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1d8fa2" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#1d8fa2" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="20" stdDeviation="28" flood-color="#000814" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#page)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <path d="M935 640c20-225 137-392 345-489" fill="none" stroke="#55d6d1" stroke-opacity="0.11" stroke-width="82"/>
+  <path d="M1015 640c9-184 98-320 265-408" fill="none" stroke="#6bd9ff" stroke-opacity="0.09" stroke-width="20"/>
+
+  <g filter="url(#shadow)">
+    <rect x="82" y="114" width="286" height="286" rx="72" fill="url(#panel)" stroke="#39bff5" stroke-opacity="0.48" stroke-width="5"/>
+    <path d="M169 204c-23 6-41 25-47 50l-14 59c-6 23 17 42 38 28l37-25h98l37 25c21 14 44-5 38-28l-14-59c-6-25-24-44-47-50-42-11-84-11-126 0Z" fill="#0c172a" stroke="url(#accent)" stroke-width="12" stroke-linejoin="round"/>
+    <path d="M174 242v47M151 265h47" stroke="#edf8ff" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="283" cy="248" r="10" fill="#69ddff"/>
+    <circle cx="309" cy="277" r="10" fill="#69ddff"/>
+    <path d="M212 223h46" stroke="#8299b7" stroke-width="9" stroke-linecap="round"/>
+  </g>
+
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <text x="438" y="142" fill="#67d9ff" font-size="23" font-weight="700" letter-spacing="4">PORTABLE · LOCAL-FIRST · WINDOWS</text>
+    <text x="432" y="246" fill="#f5f9ff" font-size="88" font-weight="750" letter-spacing="-3">GameVault</text>
+    <text x="438" y="315" fill="#d9e6f6" font-size="34" font-weight="650">Review before extraction.</text>
+    <text x="438" y="361" fill="#9db1cc" font-size="30">Your game library stays yours.</text>
+
+    <g font-size="20" font-weight="600">
+      <rect x="438" y="414" width="210" height="54" rx="27" fill="#10253a" stroke="#3dc9f4" stroke-opacity="0.34"/>
+      <circle cx="468" cy="441" r="8" fill="#58d8b1"/>
+      <text x="489" y="448" fill="#d9e8f7">Organize locally</text>
+
+      <rect x="662" y="414" width="246" height="54" rx="27" fill="#10253a" stroke="#3dc9f4" stroke-opacity="0.34"/>
+      <circle cx="692" cy="441" r="8" fill="#58d8b1"/>
+      <text x="713" y="448" fill="#d9e8f7">Review archives</text>
+
+      <rect x="922" y="414" width="188" height="54" rx="27" fill="#10253a" stroke="#3dc9f4" stroke-opacity="0.34"/>
+      <circle cx="952" cy="441" r="8" fill="#58d8b1"/>
+      <text x="973" y="448" fill="#d9e8f7">Launch offline</text>
+    </g>
+
+    <line x1="438" y1="518" x2="1108" y2="518" stroke="#52708f" stroke-opacity="0.35"/>
+    <text x="438" y="562" fill="#7f96b3" font-size="21" font-weight="600" letter-spacing="1.2">TAURI · RUST · REACT · SQLITE</text>
+    <text x="1108" y="562" fill="#58d8b1" font-size="21" font-weight="700" text-anchor="end">REVIEW-GATED INTAKE</text>
+  </g>
+</svg>

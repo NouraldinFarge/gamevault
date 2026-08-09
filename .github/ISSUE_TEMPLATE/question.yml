@@ -1,0 +1,45 @@
+name: Usage question
+description: Ask about setup, portable folders, archive review, metadata, or release verification.
+title: "[Question]: "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: Check the [README](https://github.com/NouraldinFarge/gamevault#readme), [architecture guide](https://github.com/NouraldinFarge/gamevault/blob/main/docs/ARCHITECTURE.md), and [security policy](https://github.com/NouraldinFarge/gamevault/security/policy) first. Security vulnerabilities must be reported privately.
+
+  - type: dropdown
+    id: topic
+    attributes:
+      label: Topic
+      options:
+        - Downloading or verifying a release
+        - Portable folders and upgrades
+        - Library scanning and launch
+        - ZIP intake and review
+        - Official metadata
+        - Building from source
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: Include the result you are trying to achieve and what you have already tried.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.3.5 or a short commit SHA
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I did not include game files, private archives, credentials, license keys, personal databases, or unredacted personal paths.
+          required: true
