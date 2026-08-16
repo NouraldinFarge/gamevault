@@ -11,9 +11,11 @@
 <!-- Include focused test output, synthetic fixtures, or redacted before/after screenshots. -->
 
 - [ ] `pnpm verify`
+- [ ] `pnpm test:e2e` (desktop/mobile journeys, keyboard flow, and axe)
 - [ ] `cargo fmt --manifest-path src-tauri/Cargo.toml --all --check`
 - [ ] `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings`
 - [ ] `cargo test --manifest-path src-tauri/Cargo.toml --locked`
+- [ ] `cargo check --manifest-path fuzz/Cargo.toml --locked --all-targets` with warnings denied
 - [ ] Full dependency audits pass when a lockfile changed
 - [ ] Portable build/state-preservation probes pass when release behavior changed
 
@@ -21,6 +23,8 @@
 
 - [ ] ZIP validation still precedes extraction
 - [ ] Promotion and execution still require explicit user review
+- [ ] Install/update approval is bound to a current file-diff fingerprint
+- [ ] Interrupted work is visible and is never resumed silently
 - [ ] Filesystem, process, SQLite, backup, URL, and metadata inputs remain bounded behind Rust/Tauri authority
 - [ ] Metadata remains optional and restricted to approved official hosts
 - [ ] No commercial games, private archives, credentials, databases, personal paths, or generated builds were added
@@ -30,3 +34,4 @@
 - [ ] User-facing behavior and limitations are documented
 - [ ] Screenshots use synthetic data, accurate labels, descriptive alt text, and no personal paths
 - [ ] Release notes or the changelog are updated when appropriate
+- [ ] Packaging/signing changes retain deterministic identical-input checks and fail closed on partial signing configuration

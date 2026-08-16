@@ -13,7 +13,16 @@ ZIP intake:
   expanded size, and free space before testing, extracting, reviewing,
   cleaning, and organizing them without executing archive content.
   Suspicious platform-modification markers block installation, and an existing
-  game is backed up before a staged update is promoted.
+  game is backed up before a staged update is promoted. Staging folders and
+  operation history remain visible after a restart; interrupted work is not
+  resumed automatically. Every promotion requires a current file-change
+  preview, which is checked again before files move.
+
+Redistributables:
+  Local files can audit installers found under Redist folders. The audit hashes
+  each file, reviews its Windows signature and expected publisher, and compares
+  version evidence already present on the system. It can open approved official
+  Microsoft or NVIDIA sources for your review. It never runs an installer.
 
 Official metadata:
   Link a game to Steam, GOG, or Epic from its details page. Steam accepts an
@@ -29,6 +38,17 @@ All GameVault-controlled state remains in this folder:
 
 Portable upgrades preserve data, library, user configuration, and logs. The
 new build is health-checked before the previous active build is removed.
+
+Release verification:
+  Portable ZIP entries use stable ordering, timestamps, and metadata. Published
+  releases include a SHA-256 checksum and GitHub provenance. The current public
+  release is unsigned unless its release notes and Windows signature properties
+  explicitly show otherwise; verify the published evidence before running it.
+
+Application updates:
+  Settings can manually check the official GameVault GitHub release endpoint.
+  GameVault can open the exact release page for review but does not download or
+  install application updates automatically.
 
 No installer, administrator rights, registry setup, service, scheduled task,
 shell extension, or uninstaller is used. Remove GameVault by closing it and

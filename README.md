@@ -60,7 +60,7 @@ Filter titles, categories, status, favorites, and launch readiness without a net
 
 Keep Inbox, Staging, Games, Dependencies, Quarantine, Archives, and Reports visibly separated.
 
-[![GameVault Local Files screen with portable managed folders and review-gated ZIP intake](docs/images/gamevault-local-files.jpg)](docs/images/gamevault-local-files.jpg)
+[![GameVault Local Files screen showing the Staging recovery queue, cleanup plan, and file-change approval checkpoint](docs/images/gamevault-local-files.jpg)](docs/images/gamevault-local-files.jpg)
 
 All screenshots use synthetic game names and procedural artwork. No commercial game files, cover art, or private library data are included.
 
@@ -84,7 +84,10 @@ Before extraction, GameVault inspects entry count, expanded size, compression ra
 - Path traversal, absolute or drive-relative paths, links/reparse points, unsafe Windows names, excessive expansion, and modified-platform markers block intake or promotion.
 - Nested archives remain sealed and are never recursively expanded.
 - Archive content is never executed during inspection.
+- Staging folders survive a restart as a visible recovery queue; interrupted work is recorded and is never resumed silently.
+- Every promotion requires a freshly reviewed file-level diff. A SHA-256 content fingerprint is recomputed immediately before any move so a changed staging tree cannot reuse an older approval.
 - Promotion requires explicit review and uses a rollback journal that can restore staging, separated prerequisites, the Inbox ZIP, and a previous installed version.
+- Redistributable review records the bundled hash, signature, expected publisher, installed-version evidence, detection method, and confidence without running an installer.
 - Runtime DLLs remain with their game; GameVault does not perform unsafe cross-game deduplication.
 
 Read the complete [security policy](SECURITY.md) and [architecture trust boundaries](docs/ARCHITECTURE.md).
@@ -93,10 +96,11 @@ Read the complete [security policy](SECURITY.md) and [architecture trust boundar
 
 | Evidence | Current repository gate |
 | --- | --- |
-| Frontend behavior | TypeScript validation, production build, and 5 Vitest tests |
-| Native authority | Rust formatting, Clippy with warnings denied, and 35 Rust tests |
-| Hostile inputs | Traversal, device names, NTFS streams, case collisions, links/reparse points, allowlist lookalikes, rollback, backup restore, and launch-boundary regression tests |
-| Portable runtime | Renamed-executable, path-with-spaces, portable-database, state-preservation, health-check, and no-installer probes |
+| Frontend behavior | TypeScript validation, production build, 12 Vitest contract/component/scale tests, and 16 desktop/mobile browser journeys |
+| Accessibility | Keyboard skip-navigation coverage and automated axe checks with zero serious or critical findings across every primary view at desktop and narrow widths |
+| Native authority | Rust formatting, Clippy with warnings denied, and 50 Rust tests, including property-generated archive/path cases |
+| Hostile inputs | Traversal, device names, NTFS streams, case collisions, links/reparse points, allowlist lookalikes, stale-update fingerprints, rollback, backup restore, launch-boundary regression tests, and a compiling libFuzzer target |
+| Portable runtime | Renamed-executable, path-with-spaces, portable-database, state-preservation, health-check, deterministic identical-input ZIP, signing-hook fail-closed, and no-installer probes |
 | Supply chain | Full JavaScript and Rust audits, CodeQL, immutable action pins, SHA-256 checksum, SPDX SBOM, and GitHub SLSA provenance |
 
 See the latest [GitHub Actions results](https://github.com/NouraldinFarge/gamevault/actions) and the immutable [v0.3.5 release](https://github.com/NouraldinFarge/gamevault/releases/tag/v0.3.5).
@@ -110,6 +114,7 @@ flowchart LR
     RUST --> FS["Managed filesystem"]
     RUST --> PROC["Validated process launch"]
     RUST --> META["Allowlisted official metadata"]
+    RUST --> OPS["Persisted operation journal"]
     PREVIEW["Browser preview"] -->|synthetic data only| UI
 ```
 
@@ -146,12 +151,14 @@ Prerequisites: Windows 10/11, Node.js 24, pnpm 11, the pinned Rust 1.96 MSVC too
 ```powershell
 pnpm install --frozen-lockfile
 pnpm verify
+pnpm exec playwright install chromium
+pnpm test:e2e
 cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 ```
 
-Use `pnpm dev` for the synthetic browser preview or `cargo run --manifest-path src-tauri/Cargo.toml` for the complete Tauri desktop authority. Double-click `BUILD-LATEST.bat` to run the installer-free portable release pipeline.
+Use `pnpm dev` for the synthetic browser preview or `cargo run --manifest-path src-tauri/Cargo.toml` for the complete Tauri desktop authority. Double-click `BUILD-LATEST.bat` to run the installer-free portable release pipeline. Application update checks are manual: Settings reads the latest stable release identity from the official GitHub API and opens the exact reviewed release page, but never downloads or installs it.
 
 ## Project guide
 
@@ -159,6 +166,7 @@ Use `pnpm dev` for the synthetic browser preview or `cargo run --manifest-path s
 | --- | --- |
 | [Synthetic demo guide](docs/DEMO.md) | Tour the public browser preview and understand its authority boundary |
 | [Architecture](docs/ARCHITECTURE.md) | Understand native authority, portable state, and recovery |
+| [Performance](docs/PERFORMANCE.md) | Review scale limits, bounded rendering, and the reproducible benchmark fixture |
 | [Security policy](SECURITY.md) | Review trust boundaries or report a vulnerability privately |
 | [Release checklist](docs/RELEASE_CHECKLIST.md) | Reproduce the verified release process |
 | [Contributing](CONTRIBUTING.md) | Propose and verify a safe change |

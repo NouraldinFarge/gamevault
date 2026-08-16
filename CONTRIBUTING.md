@@ -29,9 +29,13 @@ Run the complete relevant gate before opening a pull request:
 ```powershell
 pnpm install --frozen-lockfile
 pnpm verify
+pnpm exec playwright install chromium
+pnpm test:e2e
 cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --locked
+$env:RUSTFLAGS = "-Dwarnings"
+cargo check --manifest-path fuzz/Cargo.toml --locked --all-targets
 pnpm audit
 pnpm audit --prod
 cargo audit --file src-tauri/Cargo.lock
@@ -44,6 +48,8 @@ Run `BUILD-LATEST.ps1` when changing packaging, portable layout, configuration d
 
 - Archive structure is preflighted before extraction and unsafe packages fail closed.
 - Promotion and execution remain separate, explicit user actions.
+- A file-diff fingerprint is reviewed and revalidated immediately before promotion.
+- Interrupted native work is recorded and is never resumed silently.
 - Filesystem, process, SQLite, backup, URL, and metadata authority remains in Rust/Tauri.
 - Nested archives remain sealed; runtime DLLs remain with their game.
 - Metadata is optional and restricted to approved official Steam, GOG, and Epic hosts.

@@ -18,13 +18,15 @@ use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64K
 #[cfg(windows)]
 use winreg::RegKey;
 
-const MICROSOFT_VC_X64: &str = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
-const MICROSOFT_VC_X86: &str = "https://aka.ms/vs/17/release/vc_redist.x86.exe";
+const MICROSOFT_VC_X64: &str = "https://aka.ms/vc14/vc_redist.x64.exe";
+const MICROSOFT_VC_X86: &str = "https://aka.ms/vc14/vc_redist.x86.exe";
 const MICROSOFT_VC_GUIDANCE: &str =
     "https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist";
 const MICROSOFT_DIRECTX: &str = "https://www.microsoft.com/en-us/download/details.aspx?id=8109";
 const MICROSOFT_DOTNET: &str = "https://dotnet.microsoft.com/en-us/download/dotnet";
-const NVIDIA_PHYSX: &str = "https://www.nvidia.com/en-gb/drivers/physx-system-software/";
+const MICROSOFT_DOTNET_FRAMEWORK: &str =
+    "https://learn.microsoft.com/en-us/dotnet/framework/install/how-to-determine-which-versions-are-installed";
+const NVIDIA_PHYSX: &str = "https://www.nvidia.com/en-gb/drivers/physx/physx-9-23-1019-driver/";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Deserialize)]
@@ -42,6 +44,9 @@ struct Classification {
     official_url: Option<&'static str>,
     installed_status: String,
     installed_version: Option<String>,
+    installed_evidence: Vec<String>,
+    detected_by: String,
+    expected_publisher: Option<&'static str>,
 }
 
 pub fn audit(managed_root: &Path) -> Result<DependencyAudit, String> {
@@ -80,6 +85,7 @@ pub fn audit(managed_root: &Path) -> Result<DependencyAudit, String> {
 
     candidate_files.sort();
     let mut sources = HashMap::new();
+    let checked_at = Utc::now().to_rfc3339();
     let mut items = Vec::new();
     for path in candidate_files {
         let sha256 = hash_file(&path)?;
@@ -101,8 +107,19 @@ pub fn audit(managed_root: &Path) -> Result<DependencyAudit, String> {
                 .clone(),
             None => "not available".to_string(),
         };
+        let publisher = signature
+            .as_ref()
+            .and_then(|details| optional_text(&details.publisher));
+        let publisher_match =
+            publisher_match(classification.expected_publisher, publisher.as_deref());
+        let confidence = classification_confidence(
+            classification.expected_publisher,
+            &signature_status,
+            &publisher_match,
+        );
         let recommendation = recommendation(
             &signature_status,
+            &publisher_match,
             &classification.installed_status,
             classification.official_url.is_some(),
         );
@@ -116,14 +133,17 @@ pub fn audit(managed_root: &Path) -> Result<DependencyAudit, String> {
                 .and_then(|details| optional_text(&details.file_version)),
             sha256,
             signature_status,
-            publisher: signature
-                .as_ref()
-                .and_then(|details| optional_text(&details.publisher)),
+            publisher,
             installed_status: classification.installed_status,
             installed_version: classification.installed_version,
             official_source_url: classification.official_url.map(str::to_string),
             online_status,
             recommendation,
+            detected_by: classification.detected_by,
+            installed_evidence: classification.installed_evidence,
+            confidence,
+            publisher_match,
+            checked_at: checked_at.clone(),
         });
     }
 
@@ -137,7 +157,10 @@ pub fn audit(managed_root: &Path) -> Result<DependencyAudit, String> {
         .count();
     let suspicious = items
         .iter()
-        .filter(|item| !matches!(item.signature_status.as_str(), "valid" | "not applicable"))
+        .filter(|item| {
+            !matches!(item.signature_status.as_str(), "valid" | "not applicable")
+                || item.publisher_match == "mismatch"
+        })
         .count();
     let official_sources_reachable = !sources.is_empty()
         && sources
@@ -176,6 +199,7 @@ pub fn is_approved_official_url(url: &str) -> bool {
             | MICROSOFT_VC_GUIDANCE
             | MICROSOFT_DIRECTX
             | MICROSOFT_DOTNET
+            | MICROSOFT_DOTNET_FRAMEWORK
             | NVIDIA_PHYSX
     )
 }
@@ -220,23 +244,29 @@ fn classify(path: &Path) -> Classification {
         .unwrap_or_default()
         .to_lowercase();
     if name.contains("vc_redist.x64") {
-        let (status, version) = visual_cpp_status("x64");
+        let (status, version, evidence) = visual_cpp_status("x64");
         return Classification {
             name: "Microsoft Visual C++ 2015–2022",
             architecture: "x64",
             official_url: Some(MICROSOFT_VC_X64),
             installed_status: status,
             installed_version: version,
+            installed_evidence: evidence,
+            detected_by: "Filename matched the official vc_redist.x64 naming pattern; identity still requires signature and publisher verification.".to_string(),
+            expected_publisher: Some("Microsoft Corporation"),
         };
     }
     if name.contains("vc_redist.x86") {
-        let (status, version) = visual_cpp_status("x86");
+        let (status, version, evidence) = visual_cpp_status("x86");
         return Classification {
             name: "Microsoft Visual C++ 2015–2022",
             architecture: "x86",
             official_url: Some(MICROSOFT_VC_X86),
             installed_status: status,
             installed_version: version,
+            installed_evidence: evidence,
+            detected_by: "Filename matched the official vc_redist.x86 naming pattern; identity still requires signature and publisher verification.".to_string(),
+            expected_publisher: Some("Microsoft Corporation"),
         };
     }
     if name.contains("vcredist") || name.contains("vc_redist") {
@@ -246,36 +276,61 @@ fn classify(path: &Path) -> Classification {
             official_url: Some(MICROSOFT_VC_GUIDANCE),
             installed_status: "review required".to_string(),
             installed_version: None,
+            installed_evidence: vec!["No exact legacy Visual C++ version can be inferred safely from the filename alone.".to_string()],
+            detected_by: "Filename matched a legacy Visual C++ redistributable pattern.".to_string(),
+            expected_publisher: Some("Microsoft Corporation"),
         };
     }
     if name.contains("dxsetup") || name.contains("dxwebsetup") || name.contains("directx") {
-        let (status, version) = directx_status();
+        let (status, version, evidence) = directx_status();
         return Classification {
             name: "Microsoft DirectX legacy runtime",
             architecture: "x86 + x64",
             official_url: Some(MICROSOFT_DIRECTX),
             installed_status: status,
             installed_version: version,
+            installed_evidence: evidence,
+            detected_by: "Filename matched a DirectX setup or redistributable pattern.".to_string(),
+            expected_publisher: Some("Microsoft Corporation"),
         };
     }
     if name.contains("physx") {
-        let (status, version) = physx_status();
+        let (status, version, evidence) = physx_status();
         return Classification {
             name: "NVIDIA PhysX System Software",
             architecture: "x86 + x64",
             official_url: Some(NVIDIA_PHYSX),
             installed_status: status,
             installed_version: version,
+            installed_evidence: evidence,
+            detected_by: "Filename matched an NVIDIA PhysX installer pattern.".to_string(),
+            expected_publisher: Some("NVIDIA Corporation"),
         };
     }
-    if name.contains("dotnet") || name.starts_with("ndp") {
-        let (status, version) = dotnet_status();
+    if name.starts_with("ndp") || name.contains("dotnetfx") || name.contains("netfx") {
+        let (status, version, evidence) = dotnet_framework_status();
+        return Classification {
+            name: "Microsoft .NET Framework",
+            architecture: architecture_from_name(&name),
+            official_url: Some(MICROSOFT_DOTNET_FRAMEWORK),
+            installed_status: status,
+            installed_version: version,
+            installed_evidence: evidence,
+            detected_by: "Filename matched a .NET Framework installer pattern.".to_string(),
+            expected_publisher: Some("Microsoft Corporation"),
+        };
+    }
+    if name.contains("dotnet") || name.contains("windowsdesktop-runtime") {
+        let (status, version, evidence) = dotnet_status();
         return Classification {
             name: "Microsoft .NET runtime",
             architecture: architecture_from_name(&name),
             official_url: Some(MICROSOFT_DOTNET),
             installed_status: status,
             installed_version: version,
+            installed_evidence: evidence,
+            detected_by: "Filename matched a modern .NET runtime installer pattern.".to_string(),
+            expected_publisher: Some("Microsoft Corporation"),
         };
     }
     Classification {
@@ -284,6 +339,11 @@ fn classify(path: &Path) -> Classification {
         official_url: None,
         installed_status: "unknown".to_string(),
         installed_version: None,
+        installed_evidence: vec![
+            "No supported installed-state detector matched this file.".to_string()
+        ],
+        detected_by: "No recognized prerequisite filename pattern matched.".to_string(),
+        expected_publisher: None,
     }
 }
 
@@ -344,9 +404,47 @@ fn optional_text(value: &str) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
-fn recommendation(signature: &str, installed: &str, has_official_source: bool) -> String {
+fn publisher_match(expected: Option<&str>, publisher: Option<&str>) -> String {
+    match (expected, publisher) {
+        (None, _) => "not evaluated".to_string(),
+        (Some(_), None) => "not available".to_string(),
+        (Some(expected), Some(actual))
+            if actual.to_lowercase().contains(&expected.to_lowercase()) =>
+        {
+            "verified".to_string()
+        }
+        (Some(_), Some(_)) => "mismatch".to_string(),
+    }
+}
+
+fn classification_confidence(
+    expected_publisher: Option<&str>,
+    signature: &str,
+    publisher_match: &str,
+) -> String {
+    if expected_publisher.is_none() {
+        "low".to_string()
+    } else if signature == "valid" && publisher_match == "verified" {
+        "high".to_string()
+    } else if publisher_match != "mismatch" {
+        "medium".to_string()
+    } else {
+        "low".to_string()
+    }
+}
+
+fn recommendation(
+    signature: &str,
+    publisher_match: &str,
+    installed: &str,
+    has_official_source: bool,
+) -> String {
     if signature == "unsafe imitation" || signature == "hash mismatch" {
         return "Do not run the bundled file. Keep it quarantined and use the official source."
+            .to_string();
+    }
+    if publisher_match == "mismatch" {
+        return "Do not run this file: its signed publisher does not match the expected vendor. Use the official source."
             .to_string();
     }
     if signature != "valid" {
@@ -403,51 +501,92 @@ fn inspect_signature(_path: &Path) -> Option<SignatureDetails> {
 }
 
 #[cfg(windows)]
-fn visual_cpp_status(architecture: &str) -> (String, Option<String>) {
+fn visual_cpp_status(architecture: &str) -> (String, Option<String>, Vec<String>) {
     let key_path = format!(
         r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\{}",
         architecture
     );
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    for view in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
+    for (view, label) in [(KEY_WOW64_64KEY, "64-bit"), (KEY_WOW64_32KEY, "32-bit")] {
         if let Ok(key) = hklm.open_subkey_with_flags(&key_path, KEY_READ | view) {
             let installed = key.get_value::<u32, _>("Installed").unwrap_or_default();
             if installed == 1 {
                 let version = key.get_value::<String, _>("Version").ok();
-                return ("installed".to_string(), version);
+                return (
+                    "installed".to_string(),
+                    version,
+                    vec![format!(
+                        "HKLM\\{key_path} ({label} registry view): Installed=1"
+                    )],
+                );
             }
         }
     }
-    ("missing".to_string(), None)
+    (
+        "missing".to_string(),
+        None,
+        vec![format!("HKLM\\{key_path}: no Installed=1 value was found")],
+    )
 }
 
 #[cfg(not(windows))]
-fn visual_cpp_status(_architecture: &str) -> (String, Option<String>) {
-    ("unknown".to_string(), None)
+fn visual_cpp_status(_architecture: &str) -> (String, Option<String>, Vec<String>) {
+    (
+        "unknown".to_string(),
+        None,
+        vec!["Windows registry detection is unavailable on this platform.".to_string()],
+    )
 }
 
-fn directx_status() -> (String, Option<String>) {
+fn directx_status() -> (String, Option<String>, Vec<String>) {
     let Some(windows) = std::env::var_os("WINDIR").map(PathBuf::from) else {
-        return ("unknown".to_string(), None);
+        return (
+            "unknown".to_string(),
+            None,
+            vec![
+                "WINDIR is unavailable, so legacy DirectX components were not checked.".to_string(),
+            ],
+        );
     };
-    let required = [
+    let mut required = vec![
         windows.join("System32").join("d3dx9_43.dll"),
         windows.join("System32").join("xinput1_3.dll"),
     ];
-    if required.iter().all(|path| path.is_file()) {
+    let syswow64 = windows.join("SysWOW64");
+    if syswow64.is_dir() {
+        required.push(syswow64.join("d3dx9_43.dll"));
+        required.push(syswow64.join("xinput1_3.dll"));
+    }
+    let missing = required
+        .iter()
+        .filter(|path| !path.is_file())
+        .map(|path| path.to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
         (
             "installed".to_string(),
             Some("June 2010 components detected".to_string()),
+            vec![format!(
+                "Detected all {} representative June 2010 files across the applicable System32 and SysWOW64 directories.",
+                required.len()
+            )],
         )
     } else {
-        ("missing".to_string(), None)
+        (
+            "missing".to_string(),
+            None,
+            vec![format!(
+                "Representative June 2010 files were not detected: {}",
+                missing.join(", ")
+            )],
+        )
     }
 }
 
 #[cfg(windows)]
-fn physx_status() -> (String, Option<String>) {
+fn physx_status() -> (String, Option<String>, Vec<String>) {
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    for view in [KEY_WOW64_64KEY, KEY_WOW64_32KEY] {
+    for (view, label) in [(KEY_WOW64_64KEY, "64-bit"), (KEY_WOW64_32KEY, "32-bit")] {
         if let Ok(key) =
             hklm.open_subkey_with_flags(r"SOFTWARE\NVIDIA Corporation\PhysX", KEY_READ | view)
         {
@@ -455,27 +594,97 @@ fn physx_status() -> (String, Option<String>) {
                 .get_value::<String, _>("Version")
                 .ok()
                 .or_else(|| key.get_value::<String, _>("InstalledVersion").ok());
-            return ("installed".to_string(), version);
+            return (
+                "installed".to_string(),
+                version,
+                vec![format!(
+                    "HKLM\\SOFTWARE\\NVIDIA Corporation\\PhysX ({label} registry view) was found"
+                )],
+            );
         }
     }
-    ("missing".to_string(), None)
+    (
+        "missing".to_string(),
+        None,
+        vec![
+            "HKLM\\SOFTWARE\\NVIDIA Corporation\\PhysX was not found in either registry view."
+                .to_string(),
+        ],
+    )
 }
 
 #[cfg(not(windows))]
-fn physx_status() -> (String, Option<String>) {
-    ("unknown".to_string(), None)
+fn physx_status() -> (String, Option<String>, Vec<String>) {
+    (
+        "unknown".to_string(),
+        None,
+        vec!["Windows registry detection is unavailable on this platform.".to_string()],
+    )
 }
 
-fn dotnet_status() -> (String, Option<String>) {
+fn dotnet_status() -> (String, Option<String>, Vec<String>) {
     let output = Command::new("dotnet").arg("--list-runtimes").output();
     match output {
         Ok(output) if output.status.success() => {
             let runtimes = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let version = runtimes.lines().last().map(str::to_string);
-            ("installed".to_string(), version)
+            (
+                "installed".to_string(),
+                version,
+                vec![format!(
+                    "dotnet --list-runtimes returned {} installed runtime entr{}.",
+                    runtimes.lines().count(),
+                    if runtimes.lines().count() == 1 {
+                        "y"
+                    } else {
+                        "ies"
+                    }
+                )],
+            )
         }
-        _ => ("missing".to_string(), None),
+        _ => (
+            "missing".to_string(),
+            None,
+            vec!["dotnet --list-runtimes did not return an installed runtime.".to_string()],
+        ),
     }
+}
+
+#[cfg(windows)]
+fn dotnet_framework_status() -> (String, Option<String>, Vec<String>) {
+    let key_path = r"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full";
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    for (view, label) in [(KEY_WOW64_64KEY, "64-bit"), (KEY_WOW64_32KEY, "32-bit")] {
+        if let Ok(key) = hklm.open_subkey_with_flags(key_path, KEY_READ | view) {
+            if let Ok(release) = key.get_value::<u32, _>("Release") {
+                let version = key
+                    .get_value::<String, _>("Version")
+                    .ok()
+                    .or_else(|| Some(format!("Release {release}")));
+                return (
+                    "installed".to_string(),
+                    version,
+                    vec![format!(
+                        "HKLM\\{key_path} ({label} registry view): Release={release}"
+                    )],
+                );
+            }
+        }
+    }
+    (
+        "missing".to_string(),
+        None,
+        vec![format!("HKLM\\{key_path}: no Release value was found")],
+    )
+}
+
+#[cfg(not(windows))]
+fn dotnet_framework_status() -> (String, Option<String>, Vec<String>) {
+    (
+        "unknown".to_string(),
+        None,
+        vec!["Windows registry detection is unavailable on this platform.".to_string()],
+    )
 }
 
 #[cfg(test)]
@@ -503,5 +712,36 @@ mod tests {
         assert!(!is_approved_official_url(
             "https://example.com/vc_redist.x64.exe"
         ));
+    }
+
+    #[test]
+    fn signed_publisher_must_match_the_expected_vendor() {
+        assert_eq!(
+            publisher_match(
+                Some("Microsoft Corporation"),
+                Some("CN=Microsoft Corporation, O=Microsoft Corporation")
+            ),
+            "verified"
+        );
+        assert_eq!(
+            publisher_match(Some("Microsoft Corporation"), Some("CN=Example Publisher")),
+            "mismatch"
+        );
+        assert_eq!(
+            classification_confidence(Some("Microsoft Corporation"), "valid", "mismatch"),
+            "low"
+        );
+    }
+
+    #[test]
+    fn framework_and_modern_dotnet_installers_use_different_detectors() {
+        assert_eq!(
+            classify(Path::new("NDP481-x86-x64-AllOS-ENU.exe")).name,
+            "Microsoft .NET Framework"
+        );
+        assert_eq!(
+            classify(Path::new("windowsdesktop-runtime-8.0.0-win-x64.exe")).name,
+            "Microsoft .NET runtime"
+        );
     }
 }

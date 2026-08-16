@@ -1,3 +1,4 @@
+use crate::operations;
 use crate::path_safety;
 use crate::storage;
 use rusqlite::Connection;
@@ -21,6 +22,7 @@ impl AppCore {
         let database_path = portable_root.join("data").join("library.db");
         let database = storage::open_portable_database(&database_path, &portable_root)?;
         storage::migrate_legacy_portability_defaults(&database, &portable_root)?;
+        operations::reconcile_interrupted(&database)?;
         Ok(Self {
             database: Mutex::new(database),
             database_path,

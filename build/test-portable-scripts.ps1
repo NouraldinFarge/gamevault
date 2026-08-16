@@ -53,6 +53,81 @@ try {
     if ($defaults -ne 'new defaults') {
         throw 'The new release defaults were overwritten by the previous build.'
     }
+
+    $zipSource = Join-Path $testRoot 'deterministic source'
+    New-Item -ItemType Directory -Path (Join-Path $zipSource 'empty') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $zipSource 'nested') -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $zipSource 'z-last.txt') -Value 'last'
+    Set-Content -LiteralPath (Join-Path $zipSource 'nested\a-first.txt') -Value 'first'
+    $zipA = Join-Path $testRoot 'first.zip'
+    $zipB = Join-Path $testRoot 'second.zip'
+    New-DeterministicPortableZip -SourceDirectory $zipSource -ArchivePath $zipA
+    New-DeterministicPortableZip -SourceDirectory $zipSource -ArchivePath $zipB
+    $hashA = (Get-FileHash -LiteralPath $zipA -Algorithm SHA256).Hash
+    $hashB = (Get-FileHash -LiteralPath $zipB -Algorithm SHA256).Hash
+    if ($hashA -ne $hashB) {
+        throw 'Identical portable inputs did not produce byte-identical ZIP archives.'
+    }
+    $zipStream = [System.IO.File]::OpenRead($zipA)
+    try {
+        $zip = [System.IO.Compression.ZipArchive]::new(
+            $zipStream,
+            [System.IO.Compression.ZipArchiveMode]::Read,
+            $false
+        )
+        try {
+            $unexpectedTimestamp = $zip.Entries | Where-Object {
+                $_.LastWriteTime.DateTime -ne [datetime]'2000-01-01T00:00:00'
+            } | Select-Object -First 1
+            if ($unexpectedTimestamp) {
+                throw "Portable ZIP timestamp was not normalized: $($unexpectedTimestamp.FullName)"
+            }
+        }
+        finally {
+            $zip.Dispose()
+        }
+    }
+    finally {
+        $zipStream.Dispose()
+    }
+
+    $signingProbe = Join-Path $testRoot 'signing probe'
+    New-Item -ItemType Directory -Path $signingProbe -Force | Out-Null
+    Set-Content -LiteralPath (Join-Path $signingProbe 'GameVault.exe') -Value 'unsigned fixture'
+    $signingVariables = @(
+        'GAMEVAULT_SIGNING_PFX_BASE64',
+        'GAMEVAULT_SIGNING_PFX_PASSWORD',
+        'GAMEVAULT_SIGNING_TIMESTAMP_URL'
+    )
+    $originalSigningValues = @{}
+    foreach ($name in $signingVariables) {
+        $originalSigningValues[$name] = [System.Environment]::GetEnvironmentVariable($name)
+        [System.Environment]::SetEnvironmentVariable($name, $null)
+    }
+    try {
+        $unsignedHash = (Get-FileHash -LiteralPath (Join-Path $signingProbe 'GameVault.exe') -Algorithm SHA256).Hash
+        & (Join-Path $PSScriptRoot 'sign-portable.ps1') -PortableRoot $signingProbe
+        $afterNoOpHash = (Get-FileHash -LiteralPath (Join-Path $signingProbe 'GameVault.exe') -Algorithm SHA256).Hash
+        if ($unsignedHash -ne $afterNoOpHash) {
+            throw 'The unconfigured signing hook changed the portable executable.'
+        }
+        [System.Environment]::SetEnvironmentVariable('GAMEVAULT_SIGNING_PFX_BASE64', 'ZHVtbXk=')
+        $partialConfigurationFailed = $false
+        try {
+            & (Join-Path $PSScriptRoot 'sign-portable.ps1') -PortableRoot $signingProbe
+        }
+        catch {
+            $partialConfigurationFailed = $true
+        }
+        if (-not $partialConfigurationFailed) {
+            throw 'A partial signing configuration did not fail closed.'
+        }
+    }
+    finally {
+        foreach ($name in $signingVariables) {
+            [System.Environment]::SetEnvironmentVariable($name, $originalSigningValues[$name])
+        }
+    }
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {
@@ -60,4 +135,4 @@ finally {
     }
 }
 
-Write-Host 'Portable upgrade state preservation verified.' -ForegroundColor Green
+Write-Host 'Portable state, deterministic ZIP, and signing-hook behavior verified.' -ForegroundColor Green

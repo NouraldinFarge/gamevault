@@ -20,6 +20,16 @@ Invoke-Checked `
     -WorkingDirectory $workspace `
     -Description 'Frontend automated tests'
 Invoke-Checked `
+    -FilePath 'pnpm' `
+    -Arguments @('exec', 'playwright', 'install', 'chromium') `
+    -WorkingDirectory $workspace `
+    -Description 'Restore the pinned browser test runtime'
+Invoke-Checked `
+    -FilePath 'pnpm' `
+    -Arguments @('test:e2e') `
+    -WorkingDirectory $workspace `
+    -Description 'Browser journeys and accessibility tests'
+Invoke-Checked `
     -FilePath 'cargo' `
     -Arguments @('fmt', '--manifest-path', 'src-tauri\Cargo.toml', '--all', '--check') `
     -WorkingDirectory $workspace `
@@ -43,6 +53,18 @@ Invoke-Checked `
     -Arguments @('test', '--locked', '--manifest-path', 'src-tauri\Cargo.toml') `
     -WorkingDirectory $workspace `
     -Description 'Rust unit and storage tests'
+$previousRustFlags = $env:RUSTFLAGS
+try {
+    $env:RUSTFLAGS = '-Dwarnings'
+    Invoke-Checked `
+        -FilePath 'cargo' `
+        -Arguments @('check', '--manifest-path', 'fuzz\Cargo.toml', '--locked', '--all-targets') `
+        -WorkingDirectory $workspace `
+        -Description 'Archive-path fuzz harness compilation'
+}
+finally {
+    $env:RUSTFLAGS = $previousRustFlags
+}
 Invoke-Checked `
     -FilePath 'pwsh' `
     -Arguments @('-NoProfile', '-File', 'build\test-portable-scripts.ps1', '-WorkspaceRoot', $workspace) `

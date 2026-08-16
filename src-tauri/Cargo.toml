@@ -36,6 +36,7 @@ url = "2"
 winreg = "0.55"
 
 [dev-dependencies]
+proptest = "1.11.0"
 tempfile = "3"
 
 [profile.release]

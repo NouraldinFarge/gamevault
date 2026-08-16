@@ -1,11 +1,14 @@
 use crate::app::{clear_cache, AppCore};
 use crate::models::{
-    AppSnapshot, ArchiveInspection, CommandError, DependencyAudit, Game, GameMetadata,
-    HealthReport, InboxArchive, InstallStagedInput, InstalledPackage, MetadataLookupInput,
-    SaveGameMetadataInput, ScanResult, Settings, StagedArchive, StagedPackageAnalysis,
-    UpdateGameInput, WorkspaceStatus,
+    AppSnapshot, AppUpdateCheck, ArchiveInspection, CommandError, DependencyAudit, Game,
+    GameMetadata, HealthReport, InboxArchive, InstallStagedInput, InstalledPackage,
+    MetadataLookupInput, OperationRecord, PreviewStagedUpdateInput, SaveGameMetadataInput,
+    ScanResult, Settings, StagedArchive, StagedPackageAnalysis, StagedUpdatePreview,
+    StagingPackage, UpdateGameInput, WorkspaceStatus,
 };
-use crate::{archives, dependencies, diagnostics, metadata, scanner, storage, workspace};
+use crate::{
+    archives, dependencies, diagnostics, metadata, operations, scanner, storage, updates, workspace,
+};
 use chrono::Utc;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -17,6 +20,69 @@ use tauri::{AppHandle, Emitter, State};
 
 struct ScanInProgressReset {
     core: Arc<AppCore>,
+}
+
+struct PersistedOperation {
+    core: Arc<AppCore>,
+    id: String,
+    finished: bool,
+}
+
+impl PersistedOperation {
+    fn begin(
+        core: Arc<AppCore>,
+        kind: &str,
+        label: &str,
+        source_path: Option<&str>,
+        target_path: Option<&str>,
+        recovery_hint: &str,
+    ) -> Result<Self, CommandError> {
+        let id = {
+            let connection = core.database.lock().map_err(|_| lock_error())?;
+            operations::begin(
+                &connection,
+                kind,
+                label,
+                source_path,
+                target_path,
+                recovery_hint,
+            )
+            .map_err(|_| CommandError::internal("operations.start_failed"))?
+        };
+        Ok(Self {
+            core,
+            id,
+            finished: false,
+        })
+    }
+
+    fn complete(&mut self, summary: &str, target_path: Option<&str>, report_path: Option<&str>) {
+        if let Ok(connection) = self.core.database.lock() {
+            let _ = operations::complete(&connection, &self.id, summary, target_path, report_path);
+        }
+        self.finished = true;
+    }
+
+    fn fail(&mut self, message: &str) {
+        if let Ok(connection) = self.core.database.lock() {
+            let _ = operations::fail(&connection, &self.id, message);
+        }
+        self.finished = true;
+    }
+}
+
+impl Drop for PersistedOperation {
+    fn drop(&mut self) {
+        if !self.finished {
+            if let Ok(connection) = self.core.database.lock() {
+                let _ = operations::fail(
+                    &connection,
+                    &self.id,
+                    "The command ended before it could record a final result.",
+                );
+            }
+        }
+    }
 }
 
 impl Drop for ScanInProgressReset {
@@ -153,6 +219,14 @@ pub async fn scan_library(
         storage::get_settings(&connection)
             .map_err(|_| CommandError::internal("storage.settings_read_failed"))?
     };
+    let mut operation = PersistedOperation::begin(
+        Arc::clone(&core),
+        "library-scan",
+        "Scan local library",
+        None,
+        Some(&settings.managed_root),
+        "Run a new scan; GameVault never resumes a filesystem scan silently.",
+    )?;
     let started_at = Utc::now().to_rfc3339();
     let app_for_scan = app.clone();
     let roots = settings.library_roots.clone();
@@ -192,6 +266,17 @@ pub async fn scan_library(
         Err(_) => Err(CommandError::internal("scan.worker_failed")),
     };
     let _ = app.emit("library-changed", ());
+    match &result {
+        Ok(scan) => operation.complete(
+            &format!(
+                "Checked {} folders and detected {} games.",
+                scan.folders_scanned, scan.games_detected
+            ),
+            None,
+            None,
+        ),
+        Err(error) => operation.fail(&error.message),
+    }
     result
 }
 
@@ -592,22 +677,47 @@ pub fn prepare_workspace(state: State<'_, Arc<AppCore>>) -> Result<WorkspaceStat
 pub async fn audit_dependencies(
     state: State<'_, Arc<AppCore>>,
 ) -> Result<DependencyAudit, CommandError> {
+    let core = Arc::clone(state.inner());
     let managed_root = {
         let connection = state.database.lock().map_err(|_| lock_error())?;
         storage::get_settings(&connection)
             .map_err(|_| CommandError::internal("storage.settings_read_failed"))?
             .managed_root
     };
-    tauri::async_runtime::spawn_blocking(move || dependencies::audit(Path::new(&managed_root)))
-        .await
-        .map_err(|_| CommandError::internal("dependencies.worker_failed"))?
-        .map_err(|_| {
-            CommandError::new(
-                "dependencies.audit_failed",
-                "The dependency audit could not inspect the managed Redist folders.",
-                true,
-            )
-        })
+    let mut operation = PersistedOperation::begin(
+        core,
+        "dependency-audit",
+        "Audit bundled prerequisites",
+        Some(&managed_root),
+        Some(&Path::new(&managed_root).join("Reports").to_string_lossy()),
+        "Run the audit again after reviewing the bundled Redist folders.",
+    )?;
+    let root_for_worker = managed_root.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        dependencies::audit(Path::new(&root_for_worker))
+    })
+    .await
+    .map_err(|_| CommandError::internal("dependencies.worker_failed"))?
+    .map_err(|error| {
+        CommandError::new(
+            "dependencies.audit_failed",
+            &format!("The dependency audit could not inspect the managed Redist folders: {error}"),
+            true,
+        )
+    });
+    match &result {
+        Ok(audit) => operation.complete(
+            &format!(
+                "Inspected {} files and found {} prerequisite installers.",
+                audit.files_inspected,
+                audit.items.len()
+            ),
+            None,
+            Some(&audit.report_path),
+        ),
+        Err(error) => operation.fail(&error.message),
+    }
+    result
 }
 
 #[tauri::command]
@@ -670,24 +780,52 @@ pub async fn stage_game_archive(
     archive_path: String,
     state: State<'_, Arc<AppCore>>,
 ) -> Result<StagedArchive, CommandError> {
+    let core = Arc::clone(state.inner());
     let managed_root = {
         let connection = state.database.lock().map_err(|_| lock_error())?;
         storage::get_settings(&connection)
             .map_err(|_| CommandError::internal("storage.settings_read_failed"))?
             .managed_root
     };
-    tauri::async_runtime::spawn_blocking(move || {
-        archives::stage(Path::new(&archive_path), Path::new(&managed_root))
+    let mut operation = PersistedOperation::begin(
+        core,
+        "archive-stage",
+        "Verify and stage ZIP archive",
+        Some(&archive_path),
+        Some(&Path::new(&managed_root).join("Staging").to_string_lossy()),
+        "Review the Staging recovery queue and re-run analysis; staged content is never resumed silently.",
+    )?;
+    let archive_for_worker = archive_path.clone();
+    let root_for_worker = managed_root.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        archives::stage(
+            Path::new(&archive_for_worker),
+            Path::new(&root_for_worker),
+        )
     })
     .await
     .map_err(|_| CommandError::internal("archives.worker_failed"))?
-    .map_err(|_| {
+    .map_err(|error| {
         CommandError::new(
             "archives.stage_failed",
-            "The ZIP could not be extracted safely into Staging. No game files were launched.",
+            &format!(
+                "The ZIP could not be extracted safely into Staging. No game files were launched: {error}"
+            ),
             true,
         )
-    })
+    });
+    match &result {
+        Ok(staged) => operation.complete(
+            &format!(
+                "Staged {} files for explicit review.",
+                staged.files_extracted
+            ),
+            Some(&staged.staging_path),
+            Some(&staged.report_path),
+        ),
+        Err(error) => operation.fail(&error.message),
+    }
+    result
 }
 
 #[tauri::command]
@@ -704,6 +842,31 @@ pub fn list_inbox_archives(
             true,
         )
     })
+}
+
+#[tauri::command]
+pub fn list_staging_packages(
+    state: State<'_, Arc<AppCore>>,
+) -> Result<Vec<StagingPackage>, CommandError> {
+    let connection = state.database.lock().map_err(|_| lock_error())?;
+    let settings = storage::get_settings(&connection)
+        .map_err(|_| CommandError::internal("storage.settings_read_failed"))?;
+    archives::list_staging(Path::new(&settings.managed_root)).map_err(|_| {
+        CommandError::new(
+            "archives.staging_read_failed",
+            "GameVault could not review the Staging recovery queue.",
+            true,
+        )
+    })
+}
+
+#[tauri::command]
+pub fn get_operation_history(
+    state: State<'_, Arc<AppCore>>,
+) -> Result<Vec<OperationRecord>, CommandError> {
+    let connection = state.database.lock().map_err(|_| lock_error())?;
+    operations::list(&connection)
+        .map_err(|_| CommandError::internal("operations.history_read_failed"))
 }
 
 #[tauri::command]
@@ -732,31 +895,73 @@ pub async fn analyze_staged_package(
 }
 
 #[tauri::command]
-pub async fn install_staged_package(
-    input: InstallStagedInput,
-    app: AppHandle,
+pub async fn preview_staged_update(
+    input: PreviewStagedUpdateInput,
     state: State<'_, Arc<AppCore>>,
-) -> Result<InstalledPackage, CommandError> {
+) -> Result<StagedUpdatePreview, CommandError> {
     let managed_root = {
         let connection = state.database.lock().map_err(|_| lock_error())?;
         storage::get_settings(&connection)
             .map_err(|_| CommandError::internal("storage.settings_read_failed"))?
             .managed_root
     };
+    tauri::async_runtime::spawn_blocking(move || {
+        archives::preview_staged_update(&input, Path::new(&managed_root))
+    })
+    .await
+    .map_err(|_| CommandError::internal("archives.worker_failed"))?
+    .map_err(|error| CommandError::new("archives.preview_failed", &error, true))
+}
+
+#[tauri::command]
+pub async fn install_staged_package(
+    input: InstallStagedInput,
+    app: AppHandle,
+    state: State<'_, Arc<AppCore>>,
+) -> Result<InstalledPackage, CommandError> {
+    let core = Arc::clone(state.inner());
+    let managed_root = {
+        let connection = state.database.lock().map_err(|_| lock_error())?;
+        storage::get_settings(&connection)
+            .map_err(|_| CommandError::internal("storage.settings_read_failed"))?
+            .managed_root
+    };
+    let target = Path::new(&managed_root)
+        .join("Games")
+        .join(input.title.trim())
+        .to_string_lossy()
+        .to_string();
+    let mut operation = PersistedOperation::begin(
+        core,
+        "archive-promote",
+        "Organize staged game",
+        Some(&input.staging_path),
+        Some(&target),
+        "Review the operation record, Staging, Games, and Archives/Updates before retrying.",
+    )?;
     let input_for_worker = input.clone();
     let root_for_worker = managed_root.clone();
-    let promotion = tauri::async_runtime::spawn_blocking(move || {
+    let promotion_result = tauri::async_runtime::spawn_blocking(move || {
         archives::promote_staged(&input_for_worker, Path::new(&root_for_worker))
     })
     .await
     .map_err(|_| CommandError::internal("archives.worker_failed"))?
-    .map_err(|_| {
+    .map_err(|error| {
         CommandError::new(
             "archives.install_failed",
-            "The package could not be organized into Games. Existing game files were preserved or restored.",
+            &format!(
+                "The package could not be organized into Games. Existing game files were preserved or restored: {error}"
+            ),
             false,
         )
-    })?;
+    });
+    let promotion = match promotion_result {
+        Ok(value) => value,
+        Err(error) => {
+            operation.fail(&error.message);
+            return Err(error);
+        }
+    };
     let title = promotion
         .installed_path
         .file_name()
@@ -787,7 +992,7 @@ pub async fn install_staged_package(
     };
     let _ = app.emit("library-changed", ());
     record_event(state.inner(), "archive.install", "completed");
-    Ok(InstalledPackage {
+    let installed = InstalledPackage {
         game,
         installed_path: promotion.installed_path.to_string_lossy().to_string(),
         backup_path: promotion
@@ -805,7 +1010,18 @@ pub async fn install_staged_package(
         updated: promotion.updated,
         warnings: promotion.warnings,
         report_path: promotion.report_path.to_string_lossy().to_string(),
-    })
+        update_preview: promotion.update_preview,
+    };
+    operation.complete(
+        if installed.updated {
+            "Updated the game and retained a rollback backup."
+        } else {
+            "Organized the staged files into the managed library."
+        },
+        Some(&installed.installed_path),
+        Some(&installed.report_path),
+    );
+    Ok(installed)
 }
 
 #[tauri::command]
@@ -841,6 +1057,33 @@ pub fn open_official_store_search(provider: String, query: String) -> Result<(),
         CommandError::new(
             "platform.browser_failed",
             "Windows could not open the official store search.",
+            true,
+        )
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn check_for_app_update() -> Result<AppUpdateCheck, CommandError> {
+    tauri::async_runtime::spawn_blocking(updates::check)
+        .await
+        .map_err(|_| CommandError::internal("updates.worker_failed"))?
+        .map_err(|error| CommandError::new("updates.check_failed", &error, true))
+}
+
+#[tauri::command]
+pub fn open_release_page(url: String) -> Result<(), CommandError> {
+    if !updates::is_approved_release_url(&url) {
+        return Err(CommandError::new(
+            "updates.release_url_not_allowed",
+            "GameVault opens only its official GitHub release pages.",
+            false,
+        ));
+    }
+    Command::new("explorer.exe").arg(url).spawn().map_err(|_| {
+        CommandError::new(
+            "platform.browser_failed",
+            "Windows could not open the official GameVault release page.",
             true,
         )
     })?;

@@ -5,6 +5,12 @@ import { snapshotKey, useSnapshot } from "../../app/query";
 import { getErrorMessage, nativeClient } from "../../shared/lib/native-client";
 import { GameCard } from "./GameCard";
 import styles from "./LibraryPage.module.css";
+import {
+  collectCategories,
+  filterAndSortGames,
+  type LibrarySort,
+  paginateGames,
+} from "./library-query";
 
 const PAGE_SIZE = 24;
 
@@ -14,7 +20,7 @@ export function LibraryPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [category, setCategory] = useState("all");
-  const [sort, setSort] = useState("title");
+  const [sort, setSort] = useState<LibrarySort>("title");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
   const favorite = useMutation({
@@ -23,42 +29,15 @@ export function LibraryPage() {
   });
 
   const games = snapshot.data?.games ?? [];
-  const categories = useMemo(
-    () => [...new Set(games.map((game) => game.category).filter(Boolean))].sort(),
-    [games],
+  const categories = useMemo(() => collectCategories(games), [games]);
+  const filtered = useMemo(
+    () => filterAndSortGames(games, { query, status, category, sort }),
+    [category, games, query, sort, status],
   );
-  const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return games
-      .filter((game) => {
-        const matchesQuery =
-          !normalizedQuery ||
-          game.title.toLowerCase().includes(normalizedQuery) ||
-          game.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
-        const matchesStatus =
-          status === "all" ||
-          (status === "favorites" && game.favorite) ||
-          game.detectionStatus === status;
-        return matchesQuery && matchesStatus && (category === "all" || game.category === category);
-      })
-      .sort((left, right) => {
-        if (sort === "recent") {
-          return (
-            new Date(right.lastPlayedAt ?? right.addedAt).getTime() -
-            new Date(left.lastPlayedAt ?? left.addedAt).getTime()
-          );
-        }
-        if (sort === "playtime") return right.playtimeSeconds - left.playtimeSeconds;
-        if (sort === "added") {
-          return new Date(right.addedAt).getTime() - new Date(left.addedAt).getTime();
-        }
-        return left.title.localeCompare(right.title);
-      });
-  }, [category, games, query, sort, status]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount);
-  const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const paginated = useMemo(() => paginateGames(filtered, page, PAGE_SIZE), [filtered, page]);
+  const visible = paginated.items;
+  const safePage = paginated.page;
+  const pageCount = paginated.pageCount;
 
   if (snapshot.isLoading) return <div className="page-state">Loading your library...</div>;
   if (snapshot.isError) {
@@ -155,7 +134,7 @@ export function LibraryPage() {
         <label className={styles.selectControl}>
           <ArrowDownAZ aria-hidden="true" size={16} />
           <span className="sr-only">Sort library</span>
-          <select value={sort} onChange={(event) => setSort(event.target.value)}>
+          <select value={sort} onChange={(event) => setSort(event.target.value as LibrarySort)}>
             <option value="title">Title</option>
             <option value="recent">Recently played</option>
             <option value="added">Recently added</option>

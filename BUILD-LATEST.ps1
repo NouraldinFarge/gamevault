@@ -33,6 +33,7 @@ try {
         -WorkspaceRoot $workspaceRoot `
         -StageRoot $stagingRoot `
         -Version $version
+    & (Join-Path $workspaceRoot 'build\sign-portable.ps1') -PortableRoot $stagingRoot
     & (Join-Path $workspaceRoot 'build\verify-portable-build.ps1') `
         -PortableRoot $stagingRoot `
         -ExpectedVersion $version

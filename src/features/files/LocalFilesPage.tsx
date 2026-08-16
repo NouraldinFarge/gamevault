@@ -2,11 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Boxes,
   CircleAlert,
-  ExternalLink,
   FileArchive,
+  FileClock,
   FilePlus2,
   FolderCheck,
   FolderPlus,
+  GitCompareArrows,
   HardDrive,
   PackageCheck,
   PackageOpen,
@@ -17,7 +18,9 @@ import { useState } from "react";
 import { snapshotKey, useNativeEvents, useSnapshot } from "../../app/query";
 import { formatBytes, formatRelativeDate } from "../../shared/lib/format";
 import { getErrorMessage, nativeClient } from "../../shared/lib/native-client";
+import { DependencyAuditPanel } from "./DependencyAuditPanel";
 import styles from "./LocalFilesPage.module.css";
+import { OperationHistoryPanel } from "./OperationHistoryPanel";
 
 const compactPackagePath = (value: string, root: string) => {
   const normalizedValue = value.replaceAll("/", "\\");
@@ -46,6 +49,18 @@ export function LocalFilesPage() {
     queryFn: nativeClient.listInboxArchives,
     retry: false,
   });
+  const stagingPackages = useQuery({
+    queryKey: ["staging-packages"],
+    queryFn: nativeClient.listStagingPackages,
+    retry: false,
+  });
+  const operationHistory = useQuery({
+    queryKey: ["operation-history"],
+    queryFn: nativeClient.getOperationHistory,
+    retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.some((operation) => operation.status === "running") ? 2_000 : false,
+  });
   const scan = useMutation({
     mutationFn: nativeClient.scanLibrary,
     onSuccess: (result) => {
@@ -58,6 +73,7 @@ export function LocalFilesPage() {
           " added.",
       );
       void queryClient.invalidateQueries({ queryKey: snapshotKey });
+      void operationHistory.refetch();
     },
     onError: () => setScanProgress(null),
   });
@@ -86,6 +102,7 @@ export function LocalFilesPage() {
       setMessage(
         `Dependency audit complete: ${result.filesInspected} files checked, ${result.suspicious} need attention.`,
       );
+      void operationHistory.refetch();
     },
   });
   const archiveInspection = useMutation({
@@ -104,6 +121,8 @@ export function LocalFilesPage() {
     onSuccess: (result) => {
       setMessage(`ZIP extracted safely into ${result.stagingPath}. Analyzing the package now.`);
       void workspaceStatus.refetch();
+      void stagingPackages.refetch();
+      void operationHistory.refetch();
       analyzePackage.mutate(result.stagingPath);
     },
   });
@@ -112,10 +131,21 @@ export function LocalFilesPage() {
     onSuccess: (result) => {
       setInstallTitle(result.suggestedTitle);
       setSelectedExecutable(result.executableCandidates[0]?.executablePath ?? "");
+      previewUpdate.reset();
       setMessage(
         result.blocked
           ? "The extracted package is blocked. Review the detected safety markers."
           : "Package analysis complete. Review the proposed title and executable.",
+      );
+    },
+  });
+  const previewUpdate = useMutation({
+    mutationFn: nativeClient.previewStagedUpdate,
+    onSuccess: (result) => {
+      setMessage(
+        result.isUpdate
+          ? `Update plan ready: ${result.addedCount} added, ${result.changedCount} changed, and ${result.removedCount} removed files.`
+          : `New installation plan ready: ${result.addedCount} files will enter Games.`,
       );
     },
   });
@@ -128,6 +158,8 @@ export function LocalFilesPage() {
       );
       void inboxArchives.refetch();
       void workspaceStatus.refetch();
+      void stagingPackages.refetch();
+      void operationHistory.refetch();
       void queryClient.invalidateQueries({ queryKey: snapshotKey });
     },
   });
@@ -143,9 +175,12 @@ export function LocalFilesPage() {
     addManual.error ??
     prepareWorkspace.error ??
     dependencyAudit.error ??
+    stagingPackages.error ??
+    operationHistory.error ??
     archiveInspection.error ??
     stageArchive.error ??
     analyzePackage.error ??
+    previewUpdate.error ??
     installPackage.error;
 
   const addRoot = async () => {
@@ -178,6 +213,7 @@ export function LocalFilesPage() {
     setMessage(null);
     stageArchive.reset();
     analyzePackage.reset();
+    previewUpdate.reset();
     installPackage.reset();
     archiveInspection.mutate(archive);
   };
@@ -187,8 +223,19 @@ export function LocalFilesPage() {
     setMessage(null);
     stageArchive.reset();
     analyzePackage.reset();
+    previewUpdate.reset();
     installPackage.reset();
     archiveInspection.mutate(archive);
+  };
+
+  const reviewStagedPackage = (stagingPath: string) => {
+    setSelectedArchive(null);
+    setMessage("Re-analyzing the existing Staging folder. No files have been promoted.");
+    archiveInspection.reset();
+    stageArchive.reset();
+    installPackage.reset();
+    previewUpdate.reset();
+    analyzePackage.mutate(stagingPath);
   };
 
   return (
@@ -363,64 +410,108 @@ export function LocalFilesPage() {
             <p className={styles.auditHint}>Place owned game ZIPs in Inbox to detect them here.</p>
           ) : null}
         </div>
-        {archiveInspection.data ? (
-          <div className={styles.archiveResult}>
-            <div className={styles.archiveHeadline}>
-              <div>
-                <strong>{archiveInspection.data.archiveName}</strong>
-                <small>
-                  {formatBytes(archiveInspection.data.archiveSizeBytes)} compressed ·{" "}
-                  {formatBytes(archiveInspection.data.unpackedSizeBytes)} unpacked ·{" "}
-                  {archiveInspection.data.fileCount} entries
-                </small>
-              </div>
-              <span
-                className={
-                  archiveInspection.data.valid && archiveInspection.data.canStage
-                    ? styles.archiveReady
-                    : styles.archiveBlocked
-                }
-              >
-                {archiveInspection.data.valid && archiveInspection.data.canStage
-                  ? "Verified"
-                  : "Blocked"}
-              </span>
-            </div>
-            {archiveInspection.data.warnings.length ? (
-              <ul className={styles.warningList}>
-                {archiveInspection.data.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.auditHint}>No package-structure warnings were detected.</p>
-            )}
-            <div className={styles.archiveActions}>
+        <div className={styles.recoveryQueue}>
+          <div className={styles.inboxHeading}>
+            <span>
+              <strong>Staging recovery queue</strong>
+              <small>
+                Packages left available for explicit review after a restart or interruption
+              </small>
+            </span>
+            <strong>{stagingPackages.data?.length ?? 0}</strong>
+          </div>
+          {(stagingPackages.data ?? []).map((staged) => (
+            <article className={styles.inboxArchive} key={staged.path}>
+              <FileClock aria-hidden="true" size={17} />
               <span>
-                {archiveInspection.data.executableCandidates.length} likely executable
-                {archiveInspection.data.executableCandidates.length === 1 ? "" : "s"} found
+                <strong>{staged.name}</strong>
+                <small>
+                  {staged.fileCount === null ? "Unreadable file set" : `${staged.fileCount} files`}
+                  {staged.modifiedAt ? ` · ${formatRelativeDate(staged.modifiedAt)}` : ""}
+                </small>
               </span>
               <button
-                className="button primary"
+                className="button ghost"
                 type="button"
-                disabled={!archiveInspection.data.canStage || stageArchive.isPending}
-                onClick={() => selectedArchive && stageArchive.mutate(selectedArchive)}
+                disabled={!staged.reviewable || analyzePackage.isPending}
+                title={staged.recoveryHint}
+                onClick={() => reviewStagedPackage(staged.path)}
               >
-                <PackageOpen aria-hidden="true" size={17} />
-                {stageArchive.isPending ? "Extracting..." : "Extract & analyze"}
+                Review again
               </button>
-            </div>
-            {stageArchive.data ? (
+            </article>
+          ))}
+          {stagingPackages.data?.length === 0 ? (
+            <p className={styles.auditHint}>No staged packages are waiting for review.</p>
+          ) : null}
+        </div>
+        {archiveInspection.data || analyzePackage.data ? (
+          <div className={styles.archiveResult}>
+            {archiveInspection.data ? (
+              <>
+                <div className={styles.archiveHeadline}>
+                  <div>
+                    <strong>{archiveInspection.data.archiveName}</strong>
+                    <small>
+                      {formatBytes(archiveInspection.data.archiveSizeBytes)} compressed ·{" "}
+                      {formatBytes(archiveInspection.data.unpackedSizeBytes)} unpacked ·{" "}
+                      {archiveInspection.data.fileCount} entries
+                    </small>
+                  </div>
+                  <span
+                    className={
+                      archiveInspection.data.valid && archiveInspection.data.canStage
+                        ? styles.archiveReady
+                        : styles.archiveBlocked
+                    }
+                  >
+                    {archiveInspection.data.valid && archiveInspection.data.canStage
+                      ? "Verified"
+                      : "Blocked"}
+                  </span>
+                </div>
+                {archiveInspection.data.warnings.length ? (
+                  <ul className={styles.warningList}>
+                    {archiveInspection.data.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={styles.auditHint}>No package-structure warnings were detected.</p>
+                )}
+                <div className={styles.archiveActions}>
+                  <span>
+                    {archiveInspection.data.executableCandidates.length} likely executable
+                    {archiveInspection.data.executableCandidates.length === 1 ? "" : "s"} found
+                  </span>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={!archiveInspection.data.canStage || stageArchive.isPending}
+                    onClick={() => selectedArchive && stageArchive.mutate(selectedArchive)}
+                  >
+                    <PackageOpen aria-hidden="true" size={17} />
+                    {stageArchive.isPending ? "Extracting..." : "Extract & analyze"}
+                  </button>
+                </div>
+                {stageArchive.data ? (
+                  <div className="notice" role="status">
+                    Extracted {stageArchive.data.filesExtracted} files to{" "}
+                    {stageArchive.data.stagingPath}
+                  </div>
+                ) : null}
+              </>
+            ) : (
               <div className="notice" role="status">
-                Extracted {stageArchive.data.filesExtracted} files to{" "}
-                {stageArchive.data.stagingPath}
+                Existing staged content was re-opened for analysis. No ZIP was re-extracted and no
+                files were promoted.
               </div>
-            ) : null}
+            )}
             {analyzePackage.data ? (
               <div className={styles.installReview}>
                 <div className={styles.archiveHeadline}>
                   <div>
-                    <strong>Cleanup and installation plan</strong>
+                    <h3>Cleanup and installation plan</h3>
                     <small>
                       {analyzePackage.data.redistFolders.length} Redist folders ·{" "}
                       {analyzePackage.data.packageExtras.length} package extras ·{" "}
@@ -459,7 +550,10 @@ export function LocalFilesPage() {
                       className="field"
                       value={installTitle}
                       maxLength={80}
-                      onChange={(event) => setInstallTitle(event.target.value)}
+                      onChange={(event) => {
+                        setInstallTitle(event.target.value);
+                        previewUpdate.reset();
+                      }}
                     />
                   </label>
                   <label className="field-label">
@@ -467,7 +561,10 @@ export function LocalFilesPage() {
                     <select
                       className="field"
                       value={selectedExecutable}
-                      onChange={(event) => setSelectedExecutable(event.target.value)}
+                      onChange={(event) => {
+                        setSelectedExecutable(event.target.value);
+                        previewUpdate.reset();
+                      }}
                     >
                       {analyzePackage.data.executableCandidates.map((candidate) => (
                         <option value={candidate.executablePath} key={candidate.executablePath}>
@@ -478,6 +575,84 @@ export function LocalFilesPage() {
                     </select>
                   </label>
                 </div>
+                <div className={styles.updateReview}>
+                  <div>
+                    <h4>File-by-file promotion preview</h4>
+                    <p>
+                      Hash the staged and current files before any move. If either side changes,
+                      GameVault requires a fresh review.
+                    </p>
+                  </div>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={
+                      !analyzePackage.data.canInstall ||
+                      !installTitle.trim() ||
+                      !selectedExecutable ||
+                      previewUpdate.isPending
+                    }
+                    onClick={() =>
+                      previewUpdate.mutate({
+                        stagingPath: analyzePackage.data.stagingPath,
+                        executablePath: selectedExecutable,
+                        title: installTitle,
+                      })
+                    }
+                  >
+                    <GitCompareArrows aria-hidden="true" size={17} />
+                    {previewUpdate.isPending
+                      ? "Hashing files..."
+                      : previewUpdate.data
+                        ? "Refresh file preview"
+                        : "Preview file changes"}
+                  </button>
+                </div>
+                {previewUpdate.data ? (
+                  <div className={styles.diffPanel} aria-live="polite">
+                    <h4>File change checkpoint</h4>
+                    <div className={styles.diffSummary}>
+                      <span>
+                        <strong>{previewUpdate.data.addedCount}</strong> added
+                      </span>
+                      <span>
+                        <strong>{previewUpdate.data.changedCount}</strong> changed
+                      </span>
+                      <span>
+                        <strong>{previewUpdate.data.removedCount}</strong> removed
+                      </span>
+                      <span>
+                        <strong>{previewUpdate.data.unchangedCount}</strong> unchanged
+                      </span>
+                    </div>
+                    <p>
+                      {previewUpdate.data.isUpdate
+                        ? `The current installation will first move to ${previewUpdate.data.rollbackRoot}.`
+                        : `This is a new managed installation at ${previewUpdate.data.destinationPath}.`}
+                    </p>
+                    {previewUpdate.data.addedSample.length ||
+                    previewUpdate.data.changedSample.length ||
+                    previewUpdate.data.removedSample.length ? (
+                      <details>
+                        <summary>Review representative relative paths</summary>
+                        {[
+                          ["Added", previewUpdate.data.addedSample],
+                          ["Changed", previewUpdate.data.changedSample],
+                          ["Removed", previewUpdate.data.removedSample],
+                        ].map(([label, paths]) =>
+                          paths.length ? (
+                            <div key={label as string}>
+                              <strong>{label as string}</strong>
+                              {(paths as string[]).map((path) => (
+                                <code key={`${label}-${path}`}>{path}</code>
+                              ))}
+                            </div>
+                          ) : null,
+                        )}
+                      </details>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className={styles.installActions}>
                   <p>
                     Game files move to Games. Redist folders move to Dependencies, wrapper extras to
@@ -490,6 +665,7 @@ export function LocalFilesPage() {
                       !analyzePackage.data.canInstall ||
                       !installTitle.trim() ||
                       !selectedExecutable ||
+                      !previewUpdate.data ||
                       installPackage.isPending
                     }
                     onClick={() =>
@@ -498,6 +674,7 @@ export function LocalFilesPage() {
                         executablePath: selectedExecutable,
                         title: installTitle,
                         archivePath: selectedArchive,
+                        updateFingerprint: previewUpdate.data?.fingerprint ?? "",
                       })
                     }
                   >
@@ -524,82 +701,18 @@ export function LocalFilesPage() {
         )}
       </section>
 
-      <section className={styles.dependencyPanel}>
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Safe prerequisite review</p>
-            <h2>Redistributable audit</h2>
-            <p>
-              Inspect bundled installers, verify signatures, check Windows, and contact only
-              approved official vendor sources.
-            </p>
-          </div>
-          <button
-            className="button"
-            type="button"
-            disabled={dependencyAudit.isPending}
-            onClick={() => dependencyAudit.mutate()}
-          >
-            <PackageCheck aria-hidden="true" size={17} />
-            {dependencyAudit.isPending ? "Auditing..." : "Audit dependencies"}
-          </button>
-        </div>
-        {dependencyAudit.data ? (
-          <>
-            <div className={styles.auditSummary}>
-              <span>
-                <strong>{dependencyAudit.data.redistFolders}</strong> Redist folders
-              </span>
-              <span>
-                <strong>{dependencyAudit.data.filesInspected}</strong> files inspected
-              </span>
-              <span>
-                <strong>{dependencyAudit.data.installed}</strong> already installed
-              </span>
-              <span className={dependencyAudit.data.suspicious ? styles.needsAttention : undefined}>
-                <strong>{dependencyAudit.data.suspicious}</strong> need attention
-              </span>
-            </div>
-            <div className={styles.dependencyList}>
-              {dependencyAudit.data.items.map((item) => (
-                <article className={styles.dependencyItem} key={item.id}>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <small>
-                      {item.architecture} · signature {item.signatureStatus} · system{" "}
-                      {item.installedStatus}
-                    </small>
-                    <p>{item.recommendation}</p>
-                  </div>
-                  {item.officialSourceUrl ? (
-                    <button
-                      className="button ghost"
-                      type="button"
-                      onClick={() =>
-                        void nativeClient.openOfficialDependencySource(item.officialSourceUrl ?? "")
-                      }
-                    >
-                      Official source
-                      <ExternalLink aria-hidden="true" size={15} />
-                    </button>
-                  ) : null}
-                </article>
-              ))}
-              {!dependencyAudit.data.items.length ? (
-                <div className={styles.emptyRoot}>No bundled installers were found.</div>
-              ) : null}
-            </div>
-            <small className={styles.reportPath}>
-              Report saved to {dependencyAudit.data.reportPath}
-            </small>
-          </>
-        ) : (
-          <p className={styles.auditHint}>
-            GameVault never runs a bundled installer during this audit. Installation remains a
-            separate, user-approved action.
-          </p>
-        )}
-      </section>
+      <DependencyAuditPanel
+        audit={dependencyAudit.data}
+        pending={dependencyAudit.isPending}
+        onAudit={() => dependencyAudit.mutate()}
+        onOpenSource={(url) => void nativeClient.openOfficialDependencySource(url)}
+      />
+
+      <OperationHistoryPanel
+        operations={operationHistory.data}
+        fetching={operationHistory.isFetching}
+        onRefresh={() => void operationHistory.refetch()}
+      />
 
       <section>
         <div className="section-heading">

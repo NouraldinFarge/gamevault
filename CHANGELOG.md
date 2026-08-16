@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Persist scans, archive staging, promotion, and prerequisite audits; reconcile unfinished records after restart; and expose operation history plus recoverable Staging folders without silently resuming work.
+- Require a bounded file-level install/update preview and recompute its SHA-256 content fingerprint immediately before promotion, preventing a changed staged package from reusing stale approval.
+- Expand Redist review with SHA-256, Authenticode, expected-publisher matching, installed-version evidence, detection method, and confidence while keeping installer execution outside the audit.
+- Add an explicit manual application-update check against the official latest stable GitHub release and validate the exact release page without downloading or installing an asset.
+- Add desktop/mobile end-to-end journeys, keyboard and axe accessibility gates, improved narrow-window navigation, higher text contrast, and a bounded 10,000-game library test.
+- Extract archive-path authority, add property-generated cases and a production-source fuzz harness, and compile that harness in CI with warnings denied.
+- Make identical staged inputs produce byte-identical portable ZIPs through ordinal entry order, fixed timestamps, and normalized entry metadata; add a fail-closed, opt-in Authenticode signing hook.
 - Add a zero-authority public demo, a guided synthetic tour, a 45-second product walkthrough, and a visibly labeled browser-preview boundary.
 - Make repository entry points clearer with direct demo and Windows-download actions plus explicit portable, installer-free, and unsigned status.
 - Patch development-only PostCSS and Nano ID advisories and expand the required dependency workflow to audit the complete JavaScript graph.
