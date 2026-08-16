@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add a zero-authority public demo, a guided synthetic tour, a 45-second product walkthrough, and a visibly labeled browser-preview boundary.
+- Make repository entry points clearer with direct demo and Windows-download actions plus explicit portable, installer-free, and unsigned status.
 - Patch development-only PostCSS and Nano ID advisories and expand the required dependency workflow to audit the complete JavaScript graph.
 - Run the required dependency check on every pull request and describe hosted release builds as verified rather than bit-for-bit reproducible.
 - Refresh the GitHub presentation with current synthetic screenshots, a branded social preview, visitor-first product and safety evidence, clearer support routes, and stronger issue and pull-request forms.
