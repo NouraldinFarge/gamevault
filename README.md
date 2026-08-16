@@ -11,7 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/NouraldinFarge/gamevault/releases/latest"><strong>Download for Windows</strong></a>
+  <a href="https://nouraldinfarge.github.io/gamevault/"><strong>Try the synthetic demo</strong></a>
+  · <a href="https://github.com/NouraldinFarge/gamevault/releases/latest"><strong>Download for Windows</strong></a>
   · <a href="#safety-model">Safety model</a>
   · <a href="#build-and-verify">Build from source</a>
   · <a href="https://nouraldinfarge.github.io">Engineering portfolio</a>
@@ -25,9 +26,14 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
 </p>
 
-<p align="center"><sub>Windows 10/11 x64 · Active 2026 portfolio project · Current release 0.3.5</sub></p>
+<p align="center"><sub>Windows 10/11 x64 · Portable ZIP · No installer · Currently unsigned · Active 2026 portfolio project · Current release 0.3.5</sub></p>
 
-[![GameVault home screen showing a portable offline collection](docs/images/gamevault-home.jpg)](docs/images/gamevault-home.jpg)
+[![Watch the 45-second GameVault product tour](docs/media/gamevault-product-tour-poster.jpg)](docs/media/gamevault-product-tour.mp4)
+
+<p align="center">
+  <a href="https://nouraldinfarge.github.io/gamevault/">Open the zero-authority synthetic demo</a>
+  · <a href="docs/DEMO.md">Follow the five-minute guided tour</a>
+</p>
 
 ## Why GameVault
 
@@ -41,6 +47,8 @@ Most launchers optimize acquisition and cloud services. GameVault focuses on a d
 | Enriches catalog entries from strictly approved official Steam, GOG, and Epic URLs | Claim ownership, antivirus scanning, sandboxing, or guaranteed archive safety |
 
 ## Product tour
+
+[![GameVault home screen showing a portable offline collection](docs/images/gamevault-home.jpg)](docs/images/gamevault-home.jpg)
 
 ### 1. Search and organize offline
 
@@ -149,6 +157,7 @@ Use `pnpm dev` for the synthetic browser preview or `cargo run --manifest-path s
 
 | Document | Start here when you want to… |
 | --- | --- |
+| [Synthetic demo guide](docs/DEMO.md) | Tour the public browser preview and understand its authority boundary |
 | [Architecture](docs/ARCHITECTURE.md) | Understand native authority, portable state, and recovery |
 | [Security policy](SECURITY.md) | Review trust boundaries or report a vulnerability privately |
 | [Release checklist](docs/RELEASE_CHECKLIST.md) | Reproduce the verified release process |

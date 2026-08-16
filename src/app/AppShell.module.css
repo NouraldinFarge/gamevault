@@ -173,6 +173,52 @@
   padding: clamp(1.25rem, 3vw, 3rem);
 }
 
+.demoBanner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-end: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--color-success) 38%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-success) 8%, var(--color-surface));
+  color: var(--color-text-muted);
+}
+
+.demoBannerIcon {
+  color: var(--color-success);
+}
+
+.demoBanner strong,
+.demoBanner small {
+  display: block;
+}
+
+.demoBanner strong {
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.demoBanner small {
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.demoBanner a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-action-hover);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.demoBanner a:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 68rem) {
   .sidebar {
     inline-size: 5.5rem;
@@ -192,5 +238,31 @@
 
   .main {
     margin-inline-start: 5.5rem;
+  }
+
+  .demoBanner {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .demoBanner a {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 42rem) {
+  .main {
+    padding-inline: var(--space-4);
+  }
+
+  .demoBanner {
+    grid-template-columns: 1fr;
+  }
+
+  .demoBannerIcon {
+    display: none;
+  }
+
+  .demoBanner a {
+    grid-column: 1;
   }
 }

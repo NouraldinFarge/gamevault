@@ -1,6 +1,16 @@
 import { Link } from "@tanstack/react-router";
-import { FolderSearch2, Gamepad2, House, LibraryBig, ScanSearch, Settings2 } from "lucide-react";
+import {
+  ExternalLink,
+  FolderSearch2,
+  Gamepad2,
+  House,
+  LibraryBig,
+  ScanSearch,
+  Settings2,
+  ShieldCheck,
+} from "lucide-react";
 import type { ReactNode } from "react";
+import { isDesktopRuntime } from "../shared/lib/native-client";
 import styles from "./AppShell.module.css";
 import { useNativeEvents, useSnapshot } from "./query";
 
@@ -90,6 +100,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <main className={styles.main} id="main-content">
+        {!isDesktopRuntime() ? (
+          <aside className={styles.demoBanner} aria-label="Synthetic demonstration">
+            <ShieldCheck className={styles.demoBannerIcon} aria-hidden="true" size={19} />
+            <span>
+              <strong>Synthetic demonstration</strong>
+              <small>No filesystem access, game files, downloads, or native execution.</small>
+            </span>
+            <a href="https://github.com/NouraldinFarge/gamevault" target="_blank" rel="noreferrer">
+              Source and Windows release
+              <ExternalLink aria-hidden="true" size={14} />
+            </a>
+          </aside>
+        ) : null}
         {children}
       </main>
     </div>

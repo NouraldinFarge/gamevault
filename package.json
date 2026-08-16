@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build",
+    "build:pages": "vite build --base /gamevault/",
     "docs:check": "node scripts/check-documentation.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

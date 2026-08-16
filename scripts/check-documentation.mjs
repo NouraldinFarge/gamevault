@@ -117,6 +117,8 @@ async function checkMedia() {
     ["docs/images/gamevault-home.jpg", 1200, 600, false, "jpeg"],
     ["docs/images/gamevault-library.jpg", 1200, 600, false, "jpeg"],
     ["docs/images/gamevault-local-files.jpg", 1200, 600, false, "jpeg"],
+    ["docs/media/archive-review-plan.jpg", 1200, 600, false, "jpeg"],
+    ["docs/media/gamevault-product-tour-poster.jpg", 1200, 600, false, "jpeg"],
   ];
 
   for (const [relative, minimumWidth, minimumHeight, exact, type] of media) {
@@ -142,6 +144,16 @@ async function checkMedia() {
         } ${minimumWidth}x${minimumHeight} size`,
       );
     }
+  }
+
+  const video = "docs/media/gamevault-product-tour.mp4";
+  try {
+    const details = await stat(path.join(root, video));
+    if (details.size < 100_000) {
+      failures.push(`${video}: expected a rendered walkthrough larger than 100 KB`);
+    }
+  } catch {
+    failures.push(`${video}: required product walkthrough is missing`);
   }
 }
 
@@ -175,6 +187,9 @@ async function checkPresentation() {
   }
 
   for (const required of [
+    "https://nouraldinfarge.github.io/gamevault/",
+    "docs/DEMO.md",
+    "docs/media/gamevault-product-tour.mp4",
     "docs/ARCHITECTURE.md",
     "docs/RELEASE_CHECKLIST.md",
     "docs/images/README.md",
@@ -199,6 +214,6 @@ if (failures.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Documentation check passed: ${markdown.length} Markdown files and 4 presentation images verified.`,
+    `Documentation check passed: ${markdown.length} Markdown files, 6 presentation images, and 1 walkthrough verified.`,
   );
 }
