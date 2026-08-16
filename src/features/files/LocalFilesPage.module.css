@@ -1,8 +1,18 @@
 .page {
   display: grid;
   gap: var(--space-7, 1.75rem);
+  min-inline-size: 0;
   max-inline-size: 92rem;
   margin-inline: auto;
+}
+
+.page > *,
+.workspacePanel > *,
+.archivePanel > *,
+.dependencyPanel > *,
+.operationPanel > * {
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 .header {
@@ -684,6 +694,11 @@
 }
 
 @media (max-width: 38rem) {
+  .page :global(.section-heading) {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .workspaceFolders,
   .auditSummary,
   .diffSummary,
@@ -713,5 +728,14 @@
   .archiveActions {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .rootCard {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rootCard > button {
+    grid-column: 2;
+    justify-self: start;
   }
 }
