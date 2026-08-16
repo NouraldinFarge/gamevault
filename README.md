@@ -96,7 +96,7 @@ Read the complete [security policy](SECURITY.md) and [architecture trust boundar
 
 | Evidence | Current repository gate |
 | --- | --- |
-| Frontend behavior | TypeScript validation, production build, 12 Vitest contract/component/scale tests, and 16 desktop/mobile browser journeys |
+| Frontend behavior | TypeScript validation, production build, 12 Vitest contract/component/scale tests, and 18 desktop/mobile browser journeys |
 | Accessibility | Keyboard skip-navigation coverage and automated axe checks with zero serious or critical findings across every primary view at desktop and narrow widths |
 | Native authority | Rust formatting, Clippy with warnings denied, and 50 Rust tests, including property-generated archive/path cases |
 | Hostile inputs | Traversal, device names, NTFS streams, case collisions, links/reparse points, allowlist lookalikes, stale-update fingerprints, rollback, backup restore, launch-boundary regression tests, and a compiling libFuzzer target |

@@ -81,6 +81,23 @@ for (const route of ["/", "/#/library", "/#/files", "/#/settings"]) {
   });
 }
 
+test("primary views stay inside the viewport", async ({ page }) => {
+  for (const route of ["/", "/#/library", "/#/files", "/#/settings"]) {
+    await page.goto(route);
+    await expect(
+      page.getByRole("complementary", { name: "Synthetic demonstration" }),
+    ).toBeVisible();
+
+    const viewport = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(viewport.scrollWidth, `${route} overflows the viewport`).toBeLessThanOrEqual(
+      viewport.clientWidth,
+    );
+  }
+});
+
 test("keyboard users can skip navigation and reach the current view", async ({ page }) => {
   await page.goto("/");
   await page.keyboard.press("Tab");
