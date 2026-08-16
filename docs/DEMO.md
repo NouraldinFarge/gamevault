@@ -7,8 +7,8 @@ The public GameVault demo runs the React interface with fictional games, procedu
 1. **Home** — review the featured title, portable-library statistics, recent additions, and continuation shortcuts.
 2. **Library** — search, filter, sort, change layout, favorite a title, and open its details.
 3. **Game details** — edit personal metadata and preview the explicit official-store matching workflow.
-4. **Local files** — inspect the managed folder model and the staged ZIP-review journey using synthetic responses.
-5. **Settings** — review portable paths, diagnostics, database backup controls, and product boundaries.
+4. **Local files** — inspect the managed folder model, reopen a synthetic Staging package, preview exact file changes, review prerequisite evidence, and inspect persistent operation history.
+5. **Settings** — review portable paths, diagnostics, database backup controls, the manual-only update check, and product boundaries.
 
 The demo deliberately cannot prove native archive handling. The Rust tests, release checks, and downloadable Windows build provide that evidence; see the [README evidence table](../README.md#evidence-not-promises) and [architecture](ARCHITECTURE.md).
 

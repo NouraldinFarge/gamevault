@@ -50,6 +50,10 @@ jobs:
       - name: Build and verify portable package
         working-directory: project/workspace
         shell: pwsh
+        env:
+          GAMEVAULT_SIGNING_PFX_BASE64: ${{ secrets.GAMEVAULT_SIGNING_PFX_BASE64 }}
+          GAMEVAULT_SIGNING_PFX_PASSWORD: ${{ secrets.GAMEVAULT_SIGNING_PFX_PASSWORD }}
+          GAMEVAULT_SIGNING_TIMESTAMP_URL: ${{ vars.GAMEVAULT_SIGNING_TIMESTAMP_URL }}
         run: ./BUILD-LATEST.ps1
 
       - name: Prepare release assets and checksum

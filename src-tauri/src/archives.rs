@@ -1,6 +1,11 @@
+use crate::archive_paths::{
+    has_extension, has_modified_platform_marker, is_reserved_windows_name, likely_game_executable,
+    normalized_archive_key, parse_listing, path_has_redist_component, unsafe_archive_path,
+};
+use crate::file_diff;
 use crate::models::{
-    ArchiveInspection, InboxArchive, InstallStagedInput, StagedArchive, StagedExecutableCandidate,
-    StagedPackageAnalysis,
+    ArchiveInspection, InboxArchive, InstallStagedInput, PreviewStagedUpdateInput, StagedArchive,
+    StagedExecutableCandidate, StagedPackageAnalysis, StagedUpdatePreview, StagingPackage,
 };
 use crate::path_safety;
 use crate::scanner;
@@ -9,7 +14,7 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::ErrorKind;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::UNIX_EPOCH;
 use walkdir::WalkDir;
@@ -48,6 +53,7 @@ pub struct PromotionResult {
     pub updated: bool,
     pub warnings: Vec<String>,
     pub report_path: PathBuf,
+    pub update_preview: StagedUpdatePreview,
     original_install_path: PathBuf,
     cleanup_moves: Vec<CleanupMove>,
 }
@@ -56,13 +62,6 @@ pub struct PromotionResult {
 struct CleanupMove {
     original_path: PathBuf,
     moved_path: PathBuf,
-}
-
-#[derive(Debug)]
-struct ArchiveEntry {
-    path: String,
-    size: u64,
-    link_or_reparse: bool,
 }
 
 pub fn inspect(archive: &Path) -> Result<ArchiveInspection, String> {
@@ -342,6 +341,48 @@ pub fn list_inbox(managed_root: &Path) -> Result<Vec<InboxArchive>, String> {
     Ok(archives)
 }
 
+pub fn list_staging(managed_root: &Path) -> Result<Vec<StagingPackage>, String> {
+    let staging = path_safety::ensure_managed_directory(managed_root, &["Staging"])?;
+    let mut packages = Vec::new();
+    for entry in fs::read_dir(&staging).map_err(|error| error.to_string())? {
+        if packages.len() >= 100 {
+            break;
+        }
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let file_type = entry.file_type().map_err(|error| error.to_string())?;
+        if !file_type.is_dir() || path_safety::is_link_or_reparse(&path) {
+            continue;
+        }
+        let files = collect_staged_files(&path);
+        let file_count = files.as_ref().ok().map(Vec::len);
+        let reviewable = file_count.is_some_and(|count| count > 0);
+        let modified_at = entry
+            .metadata()
+            .ok()
+            .and_then(|metadata| metadata.modified().ok())
+            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+            .and_then(|value| chrono::DateTime::<Utc>::from_timestamp(value.as_secs() as i64, 0))
+            .map(|value| value.to_rfc3339());
+        packages.push(StagingPackage {
+            path: display_path(&path),
+            name: entry.file_name().to_string_lossy().to_string(),
+            file_count,
+            modified_at,
+            reviewable,
+            recovery_hint: if reviewable {
+                "Review this staged package again before choosing a title and executable."
+                    .to_string()
+            } else {
+                "This staging folder is empty, unreadable, or contains an unsafe link. Review it manually before cleanup."
+                    .to_string()
+            },
+        });
+    }
+    packages.sort_by(|left, right| right.modified_at.cmp(&left.modified_at));
+    Ok(packages)
+}
+
 pub fn analyze_staged(
     staging_path: &Path,
     managed_root: &Path,
@@ -471,6 +512,35 @@ pub fn analyze_staged(
     })
 }
 
+pub fn preview_staged_update(
+    input: &PreviewStagedUpdateInput,
+    managed_root: &Path,
+) -> Result<StagedUpdatePreview, String> {
+    let analysis = analyze_staged(Path::new(&input.staging_path), managed_root)?;
+    if analysis.blocked || !analysis.can_install {
+        return Err("This staged package did not pass the installation checks.".to_string());
+    }
+    let selected = analysis
+        .executable_candidates
+        .iter()
+        .find(|candidate| {
+            candidate
+                .executable_path
+                .eq_ignore_ascii_case(&input.executable_path)
+        })
+        .ok_or_else(|| "Choose one of the analyzed game executables.".to_string())?;
+    let title = safe_folder_name(&input.title)?;
+    let install_root = PathBuf::from(&selected.install_root)
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let games_root = path_safety::ensure_managed_directory(managed_root, &["Games"])?;
+    let rollback_root =
+        path_safety::ensure_managed_directory(managed_root, &["Archives", "Updates"])?;
+    let destination = games_root.join(title);
+    let current = destination.exists().then_some(destination.as_path());
+    file_diff::compare(current, &install_root, &destination, &rollback_root)
+}
+
 pub fn promote_staged(
     input: &InstallStagedInput,
     managed_root: &Path,
@@ -505,6 +575,18 @@ pub fn promote_staged(
     let updates_root =
         path_safety::ensure_managed_directory(managed_root, &["Archives", "Updates"])?;
     let destination = games_root.join(&title);
+    let update_preview = file_diff::compare(
+        destination.exists().then_some(destination.as_path()),
+        &install_root,
+        &destination,
+        &updates_root,
+    )?;
+    if input.update_fingerprint != update_preview.fingerprint {
+        return Err(
+            "The staged or installed files changed after review. Preview the file plan again."
+                .to_string(),
+        );
+    }
     let stamp = Utc::now().format("%Y%m%d-%H%M%S").to_string();
     let mut backup_path = None;
     if destination.exists() {
@@ -561,6 +643,7 @@ pub fn promote_staged(
         archived_package_path,
         warnings,
         report_path: PathBuf::new(),
+        update_preview,
         original_install_path: install_root,
         cleanup_moves,
     };
@@ -574,6 +657,7 @@ pub fn promote_staged(
         result.extras_path.as_deref(),
         result.archived_package_path.as_deref(),
         &result.warnings,
+        &result.update_preview,
     ) {
         Ok(path) => path,
         Err(error) => {
@@ -1016,6 +1100,7 @@ fn write_install_report(
     extras_path: Option<&Path>,
     archived_package_path: Option<&Path>,
     warnings: &[String],
+    update_preview: &StagedUpdatePreview,
 ) -> Result<PathBuf, String> {
     let reports = path_safety::ensure_managed_directory(managed_root, &["Reports"])?;
     let path = unique_destination(&reports.join(format!(
@@ -1032,6 +1117,7 @@ fn write_install_report(
         "extrasPath": extras_path,
         "archivedPackagePath": archived_package_path,
         "warnings": warnings,
+        "updatePreview": update_preview,
     });
     fs::write(
         &path,
@@ -1114,154 +1200,6 @@ impl CommandWindowExt for Command {
     }
 }
 
-fn parse_listing(output: &str) -> Vec<ArchiveEntry> {
-    let mut entries = Vec::new();
-    let mut current_path: Option<String> = None;
-    let mut current_size = 0_u64;
-    let mut current_link_or_reparse = false;
-    for line in output.lines().chain(std::iter::once("")) {
-        if let Some(value) = line.strip_prefix("Path = ") {
-            if let Some(path) = current_path.take() {
-                entries.push(ArchiveEntry {
-                    path,
-                    size: current_size,
-                    link_or_reparse: current_link_or_reparse,
-                });
-            }
-            current_path = Some(value.to_string());
-            current_size = 0;
-            current_link_or_reparse = false;
-        } else if let Some(value) = line.strip_prefix("Size = ") {
-            current_size = value.parse().unwrap_or_default();
-        } else if let Some(value) = line.strip_prefix("Attributes = ") {
-            current_link_or_reparse |= archive_attributes_are_link_or_reparse(value);
-        } else if ["Symbolic Link = ", "Hard Link = ", "Reparse Point = "]
-            .iter()
-            .any(|prefix| {
-                line.strip_prefix(prefix)
-                    .is_some_and(|value| !value.is_empty())
-            })
-        {
-            current_link_or_reparse = true;
-        } else if line.is_empty() {
-            if let Some(path) = current_path.take() {
-                entries.push(ArchiveEntry {
-                    path,
-                    size: current_size,
-                    link_or_reparse: current_link_or_reparse,
-                });
-                current_size = 0;
-                current_link_or_reparse = false;
-            }
-        }
-    }
-    entries
-}
-
-fn unsafe_archive_path(value: &str) -> bool {
-    if value.is_empty()
-        || value.contains('\0')
-        || value.starts_with(['\\', '/'])
-        || Path::new(value).is_absolute()
-    {
-        return true;
-    }
-    let windows_path = value.replace('/', "\\");
-    windows_path.split('\\').any(|component| {
-        component.is_empty()
-            || matches!(component, "." | "..")
-            || component.contains(':')
-            || component.ends_with([' ', '.'])
-            || is_reserved_windows_name(component)
-    }) || Path::new(value)
-        .components()
-        .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
-}
-
-fn archive_attributes_are_link_or_reparse(value: &str) -> bool {
-    let lower = value.trim().to_ascii_lowercase();
-    lower.starts_with('l') || lower.contains("reparse")
-}
-
-fn normalized_archive_key(value: &str) -> String {
-    value.replace('/', "\\").to_lowercase()
-}
-
-fn is_reserved_windows_name(value: &str) -> bool {
-    let stem = value
-        .split('.')
-        .next()
-        .unwrap_or_default()
-        .trim_end_matches([' ', '.'])
-        .to_ascii_uppercase();
-    matches!(
-        stem.as_str(),
-        "CON" | "PRN" | "AUX" | "NUL" | "CLOCK$" | "CONIN$" | "CONOUT$"
-    ) || stem
-        .strip_prefix("COM")
-        .or_else(|| stem.strip_prefix("LPT"))
-        .is_some_and(|suffix| {
-            matches!(
-                suffix,
-                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
-            )
-        })
-}
-
-fn has_extension(value: &str, extensions: &[&str]) -> bool {
-    Path::new(value)
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            extensions
-                .iter()
-                .any(|expected| extension.eq_ignore_ascii_case(expected))
-        })
-        .unwrap_or(false)
-}
-
-fn path_has_redist_component(value: &str) -> bool {
-    Path::new(value).components().any(|component| {
-        let name = component.as_os_str().to_string_lossy().to_lowercase();
-        name.contains("redist") || matches!(name.as_str(), "prerequisites" | "support")
-    })
-}
-
-fn has_modified_platform_marker(value: &str) -> bool {
-    let lower = value.to_lowercase();
-    lower.contains("steam_emu")
-        || lower.contains("screamapi")
-        || lower.ends_with(".rne")
-        || lower.ends_with(".valve")
-}
-
-fn likely_game_executable(value: &str) -> bool {
-    if !has_extension(value, &["exe"]) {
-        return false;
-    }
-    let lower = Path::new(value)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or_default()
-        .to_lowercase();
-    ![
-        "setup",
-        "install",
-        "unins",
-        "crash",
-        "reporter",
-        "vcredist",
-        "vc_redist",
-        "dxsetup",
-        "dxwebsetup",
-        "physx",
-        "dotnet",
-        "unitycrashhandler",
-    ]
-    .iter()
-    .any(|marker| lower.contains(marker))
-}
-
 fn clean_package_name(archive: &Path) -> String {
     let stem = archive
         .file_stem()
@@ -1306,46 +1244,6 @@ fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn listing_parser_preserves_paths_and_sizes() {
-        let entries = parse_listing(
-            "Path = Game/Game.exe\nSize = 42\n\nPath = Game/Redist/setup.exe\nSize = 9\n",
-        );
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].path, "Game/Game.exe");
-        assert_eq!(entries[0].size, 42);
-        assert!(!entries[0].link_or_reparse);
-    }
-
-    #[test]
-    fn listing_parser_marks_links_and_reparse_entries() {
-        let entries = parse_listing(
-            "Path = Game/link.exe\nSize = 5\nAttributes = lrwxrwxrwx\nSymbolic Link = ../outside.exe\n",
-        );
-        assert_eq!(entries.len(), 1);
-        assert!(entries[0].link_or_reparse);
-    }
-
-    #[test]
-    fn path_traversal_is_blocked() {
-        assert!(unsafe_archive_path("../outside.exe"));
-        assert!(unsafe_archive_path(r"C:\outside.exe"));
-        assert!(unsafe_archive_path(r"Game\..\outside.exe"));
-        assert!(unsafe_archive_path(r"Game\payload.exe:stream"));
-        assert!(unsafe_archive_path(r"Game\CON.txt"));
-        assert!(unsafe_archive_path(r"Game\name.\payload.exe"));
-        assert!(unsafe_archive_path(r"\\server\share\game.exe"));
-        assert!(!unsafe_archive_path("Game/Game.exe"));
-    }
-
-    #[test]
-    fn windows_case_collisions_normalize_to_the_same_key() {
-        assert_eq!(
-            normalized_archive_key("Game/Bin/Game.exe"),
-            normalized_archive_key(r"game\bin\GAME.EXE")
-        );
-    }
 
     #[test]
     fn reserved_windows_folder_names_are_rejected() {
@@ -1421,12 +1319,22 @@ mod tests {
         assert!(analysis.can_install);
         assert_eq!(analysis.redist_folders.len(), 1);
         let selected = analysis.executable_candidates.first().expect("candidate");
+        let preview = preview_staged_update(
+            &PreviewStagedUpdateInput {
+                staging_path: analysis.staging_path.clone(),
+                executable_path: selected.executable_path.clone(),
+                title: "Example Game".to_string(),
+            },
+            &managed,
+        )
+        .expect("preview");
         let result = promote_staged(
             &InstallStagedInput {
                 staging_path: analysis.staging_path.clone(),
                 executable_path: selected.executable_path.clone(),
                 title: "Example Game".to_string(),
                 archive_path: Some(archive.to_string_lossy().to_string()),
+                update_fingerprint: preview.fingerprint,
             },
             &managed,
         )
@@ -1437,6 +1345,23 @@ mod tests {
         assert!(result.dependencies_path.is_some());
         assert!(result.extras_path.is_some());
         assert!(result.archived_package_path.is_some());
+    }
+
+    #[test]
+    fn staging_queue_survives_restart_for_explicit_reanalysis() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let managed = directory.path().join("GameVault");
+        let staged = managed
+            .join("Staging")
+            .join("Recovered Game-20260815-120000");
+        fs::create_dir_all(&staged).expect("staging");
+        fs::write(staged.join("RecoveredGame.exe"), vec![0_u8; 1024]).expect("game");
+
+        let queue = list_staging(&managed).expect("queue");
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].file_count, Some(1));
+        assert!(queue[0].reviewable);
+        assert!(queue[0].path.ends_with("Recovered Game-20260815-120000"));
     }
 
     #[test]
@@ -1455,6 +1380,72 @@ mod tests {
     }
 
     #[test]
+    fn update_requires_an_unchanged_file_preview_and_keeps_a_rollback_backup() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let managed = directory.path().join("GameVault");
+        let staging = managed.join("Staging").join("package-update");
+        let proposed = staging.join("Update Game");
+        let current = managed.join("Games").join("Update Game");
+        fs::create_dir_all(&proposed).expect("proposed");
+        fs::create_dir_all(&current).expect("current");
+        fs::write(proposed.join("UpdateGame.exe"), vec![2_u8; 1024]).expect("proposed exe");
+        fs::write(proposed.join("added.pak"), b"new content").expect("added");
+        fs::write(current.join("UpdateGame.exe"), vec![1_u8; 1024]).expect("current exe");
+        fs::write(current.join("removed.pak"), b"old content").expect("removed");
+
+        let analysis = analyze_staged(&staging, &managed).expect("analysis");
+        let selected = analysis.executable_candidates.first().expect("candidate");
+        let preview_input = PreviewStagedUpdateInput {
+            staging_path: analysis.staging_path.clone(),
+            executable_path: selected.executable_path.clone(),
+            title: "Update Game".to_string(),
+        };
+        let preview = preview_staged_update(&preview_input, &managed).expect("preview");
+        assert!(preview.is_update);
+        assert_eq!(preview.added_count, 1);
+        assert_eq!(preview.changed_count, 1);
+        assert_eq!(preview.removed_count, 1);
+
+        fs::write(proposed.join("changed-after-review.dat"), b"changed").expect("change");
+        let stale_result = promote_staged(
+            &InstallStagedInput {
+                staging_path: preview_input.staging_path.clone(),
+                executable_path: preview_input.executable_path.clone(),
+                title: preview_input.title.clone(),
+                archive_path: None,
+                update_fingerprint: preview.fingerprint,
+            },
+            &managed,
+        );
+        assert!(stale_result.is_err());
+        assert!(current.join("removed.pak").is_file());
+        assert!(proposed.join("changed-after-review.dat").is_file());
+
+        let refreshed = preview_staged_update(&preview_input, &managed).expect("refreshed preview");
+        let promoted = promote_staged(
+            &InstallStagedInput {
+                staging_path: preview_input.staging_path,
+                executable_path: preview_input.executable_path,
+                title: preview_input.title,
+                archive_path: None,
+                update_fingerprint: refreshed.fingerprint,
+            },
+            &managed,
+        )
+        .expect("promotion");
+        assert!(promoted.updated);
+        assert!(promoted
+            .backup_path
+            .as_ref()
+            .is_some_and(|path| path.is_dir()));
+        assert!(promoted.installed_path.join("added.pak").is_file());
+        assert!(promoted
+            .installed_path
+            .join("changed-after-review.dat")
+            .is_file());
+    }
+
+    #[test]
     fn promotion_rollback_restores_staging_cleanup_and_inbox_archive() {
         let directory = tempfile::tempdir().expect("temp directory");
         let managed = directory.path().join("GameVault");
@@ -1470,12 +1461,22 @@ mod tests {
 
         let analysis = analyze_staged(&staging, &managed).expect("analysis");
         let selected = analysis.executable_candidates.first().expect("candidate");
+        let preview = preview_staged_update(
+            &PreviewStagedUpdateInput {
+                staging_path: analysis.staging_path.clone(),
+                executable_path: selected.executable_path.clone(),
+                title: "Rollback Game".to_string(),
+            },
+            &managed,
+        )
+        .expect("preview");
         let result = promote_staged(
             &InstallStagedInput {
                 staging_path: analysis.staging_path.clone(),
                 executable_path: selected.executable_path.clone(),
                 title: "Rollback Game".to_string(),
                 archive_path: Some(archive.to_string_lossy().to_string()),
+                update_fingerprint: preview.fingerprint,
             },
             &managed,
         )

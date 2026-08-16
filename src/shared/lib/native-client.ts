@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { demoSnapshot } from "./demo-data";
 import type {
   AppSnapshot,
+  AppUpdateCheck,
   ArchiveInspection,
   DependencyAudit,
   Game,
@@ -11,24 +12,32 @@ import type {
   InstalledPackage,
   InstallStagedInput,
   MetadataLookupInput,
+  OperationRecord,
+  PreviewStagedUpdateInput,
   ScanResult,
   Settings,
   StagedArchive,
   StagedPackageAnalysis,
+  StagedUpdatePreview,
+  StagingPackage,
   UpdateGameInput,
   WorkspaceStatus,
 } from "./types";
 import {
+  AppUpdateCheckSchema,
   ArchiveInspectionSchema,
   DependencyAuditSchema,
   GameMetadataSchema,
   GameSchema,
   HealthReportSchema,
   InstalledPackageSchema,
+  OperationRecordSchema,
   SettingsSchema,
   SnapshotSchema,
   StagedArchiveSchema,
   StagedPackageAnalysisSchema,
+  StagedUpdatePreviewSchema,
+  StagingPackageSchema,
   WorkspaceStatusSchema,
 } from "./types";
 
@@ -41,6 +50,24 @@ declare global {
 export const isDesktopRuntime = () => typeof window !== "undefined" && !!window.__TAURI_INTERNALS__;
 
 const mockSnapshot = structuredClone(demoSnapshot);
+const mockStagingPackages: StagingPackage[] = [];
+const mockOperations: OperationRecord[] = [
+  {
+    id: "demo-operation-scan",
+    kind: "library-scan",
+    label: "Scan local library",
+    status: "completed",
+    sourcePath: null,
+    targetPath: mockSnapshot.settings.managedRoot,
+    summary: `Checked ${mockSnapshot.games.length} folders and detected ${mockSnapshot.games.length} games.`,
+    errorMessage: null,
+    recoveryHint: "Run a new scan; GameVault never resumes a filesystem scan silently.",
+    reportPath: null,
+    startedAt: new Date(Date.now() - 3_600_000).toISOString(),
+    updatedAt: new Date(Date.now() - 3_590_000).toISOString(),
+    completedAt: new Date(Date.now() - 3_590_000).toISOString(),
+  },
+];
 
 const refreshMockStats = () => {
   mockSnapshot.stats = {
@@ -246,12 +273,57 @@ export const nativeClient = {
         managedRoot: mockSnapshot.settings.managedRoot,
         redistFolders: 2,
         filesInspected: 14,
-        installed: 2,
-        missing: 1,
+        installed: 1,
+        missing: 0,
         suspicious: 1,
         officialSourcesReachable: true,
         reportPath: `${mockSnapshot.settings.managedRoot}\\Reports\\dependency-audit-demo.json`,
-        items: [],
+        items: [
+          {
+            id: "demo-vc-x64",
+            name: "Microsoft Visual C++ 2015–2022",
+            architecture: "x64",
+            bundledPath: `${mockSnapshot.settings.managedRoot}\\Dependencies\\Bundled\\Example Game\\Redist\\vc_redist.x64.exe`,
+            bundledVersion: "14.44.35211.0",
+            sha256: "c5e68d3f5a8dd27e5bbf3f22551d36dcdfb32f66f2a4677d9f882999839ef865",
+            signatureStatus: "valid",
+            publisher: "CN=Microsoft Corporation",
+            installedStatus: "installed",
+            installedVersion: "v14.44.35211.0",
+            officialSourceUrl: "https://aka.ms/vc14/vc_redist.x64.exe",
+            onlineStatus: "reachable",
+            recommendation: "Already installed; no bundled installer needs to run.",
+            detectedBy:
+              "Filename matched the official vc_redist.x64 naming pattern; identity still requires signature and publisher verification.",
+            installedEvidence: [
+              "HKLM\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64: Installed=1",
+            ],
+            confidence: "high",
+            publisherMatch: "verified",
+            checkedAt: new Date().toISOString(),
+          },
+          {
+            id: "demo-unknown",
+            name: "Unrecognized bundled installer",
+            architecture: "unknown",
+            bundledPath: `${mockSnapshot.settings.managedRoot}\\Dependencies\\Bundled\\Example Game\\Support\\setup.exe`,
+            bundledVersion: null,
+            sha256: "0a87b1558e3f95409a39dc5ecfd2ea4aa0dd1f6d69a38bcf057fef87072b62d3",
+            signatureStatus: "unsigned",
+            publisher: null,
+            installedStatus: "unknown",
+            installedVersion: null,
+            officialSourceUrl: null,
+            onlineStatus: "not available",
+            recommendation:
+              "Leave this installer quarantined until its publisher and purpose are verified.",
+            detectedBy: "No recognized prerequisite filename pattern matched.",
+            installedEvidence: ["No supported installed-state detector matched this file."],
+            confidence: "low",
+            publisherMatch: "not evaluated",
+            checkedAt: new Date().toISOString(),
+          },
+        ],
       });
     }
     return DependencyAuditSchema.parse(await invoke("audit_dependencies"));
@@ -293,7 +365,7 @@ export const nativeClient = {
   async stageGameArchive(archivePath: string): Promise<StagedArchive> {
     if (!isDesktopRuntime()) {
       await pause(500);
-      return {
+      const staged = {
         archivePath,
         stagingPath: "D:\\Portable Apps\\GameVault\\library\\Staging\\Example Game-20260718-120000",
         filesExtracted: 1284,
@@ -303,6 +375,31 @@ export const nativeClient = {
         warnings: ["Contains a Redist folder; audit it before installing anything."],
         reportPath: "D:\\Portable Apps\\GameVault\\library\\Reports\\archive-intake-demo.json",
       };
+      mockStagingPackages.splice(0, mockStagingPackages.length, {
+        path: staged.stagingPath,
+        name: staged.stagingPath.split("\\").at(-1) ?? "Example Game",
+        fileCount: staged.filesExtracted,
+        modifiedAt: new Date().toISOString(),
+        reviewable: true,
+        recoveryHint: "Review this staged package again before choosing a title and executable.",
+      });
+      mockOperations.unshift({
+        id: `demo-stage-${Date.now()}`,
+        kind: "archive-stage",
+        label: "Verify and stage ZIP archive",
+        status: "completed",
+        sourcePath: archivePath,
+        targetPath: staged.stagingPath,
+        summary: `Staged ${staged.filesExtracted} files for explicit review.`,
+        errorMessage: null,
+        recoveryHint:
+          "Review the Staging recovery queue and re-run analysis; staged content is never resumed silently.",
+        reportPath: staged.reportPath,
+        startedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+      return staged;
     }
     return StagedArchiveSchema.parse(await invoke("stage_game_archive", { archivePath }));
   },
@@ -310,6 +407,18 @@ export const nativeClient = {
   async listInboxArchives(): Promise<InboxArchive[]> {
     if (!isDesktopRuntime()) return [];
     return invoke<InboxArchive[]>("list_inbox_archives");
+  },
+
+  async listStagingPackages(): Promise<StagingPackage[]> {
+    if (!isDesktopRuntime())
+      return StagingPackageSchema.array().parse(structuredClone(mockStagingPackages));
+    return StagingPackageSchema.array().parse(await invoke("list_staging_packages"));
+  },
+
+  async getOperationHistory(): Promise<OperationRecord[]> {
+    if (!isDesktopRuntime())
+      return OperationRecordSchema.array().parse(structuredClone(mockOperations));
+    return OperationRecordSchema.array().parse(await invoke("get_operation_history"));
   },
 
   async analyzeStagedPackage(stagingPath: string): Promise<StagedPackageAnalysis> {
@@ -339,6 +448,31 @@ export const nativeClient = {
     );
   },
 
+  async previewStagedUpdate(input: PreviewStagedUpdateInput): Promise<StagedUpdatePreview> {
+    if (!isDesktopRuntime()) {
+      await pause(450);
+      const isUpdate = input.title.trim().toLowerCase() === "neon divide";
+      return StagedUpdatePreviewSchema.parse({
+        isUpdate,
+        destinationPath: `${mockSnapshot.settings.managedRoot}\\Games\\${input.title.trim()}`,
+        rollbackRoot: `${mockSnapshot.settings.managedRoot}\\Archives\\Updates`,
+        addedCount: isUpdate ? 12 : 1_172,
+        changedCount: isUpdate ? 84 : 0,
+        removedCount: isUpdate ? 3 : 0,
+        unchangedCount: isUpdate ? 1_073 : 0,
+        addedSample: isUpdate
+          ? ["content/new-level.pak", "bin/helper.dll"]
+          : ["ExampleGame.exe", "content/base.pak"],
+        changedSample: isUpdate ? ["ExampleGame.exe", "content/base.pak"] : [],
+        removedSample: isUpdate ? ["content/obsolete.pak"] : [],
+        currentSizeBytes: isUpdate ? 4_300_000_000 : 0,
+        proposedSizeBytes: 4_800_000_000,
+        fingerprint: "d".repeat(64),
+      });
+    }
+    return StagedUpdatePreviewSchema.parse(await invoke("preview_staged_update", { input }));
+  },
+
   async installStagedPackage(input: InstallStagedInput): Promise<InstalledPackage> {
     if (!isDesktopRuntime()) {
       const game = structuredClone(mockSnapshot.games[0]);
@@ -352,6 +486,21 @@ export const nativeClient = {
         updated: false,
         warnings: [],
         reportPath: "D:\\Portable Apps\\GameVault\\library\\Reports\\game-install-demo.json",
+        updatePreview: {
+          isUpdate: false,
+          destinationPath: `D:\\Portable Apps\\GameVault\\library\\Games\\${input.title}`,
+          rollbackRoot: "D:\\Portable Apps\\GameVault\\library\\Archives\\Updates",
+          addedCount: 1_172,
+          changedCount: 0,
+          removedCount: 0,
+          unchangedCount: 0,
+          addedSample: ["ExampleGame.exe", "content/base.pak"],
+          changedSample: [],
+          removedSample: [],
+          currentSizeBytes: 0,
+          proposedSizeBytes: 4_800_000_000,
+          fingerprint: input.updateFingerprint,
+        },
       });
     }
     return InstalledPackageSchema.parse(await invoke("install_staged_package", { input }));
@@ -403,6 +552,29 @@ export const nativeClient = {
       return;
     }
     return invoke("open_official_store_search", { provider, query });
+  },
+
+  async checkForAppUpdate(): Promise<AppUpdateCheck> {
+    if (!isDesktopRuntime()) {
+      await pause(400);
+      return AppUpdateCheckSchema.parse({
+        currentVersion: "0.3.5",
+        latestVersion: "0.3.5",
+        updateAvailable: false,
+        releaseUrl: "https://github.com/NouraldinFarge/gamevault/releases/tag/v0.3.5",
+        publishedAt: "2026-08-08T00:00:00Z",
+        checkedAt: new Date().toISOString(),
+      });
+    }
+    return AppUpdateCheckSchema.parse(await invoke("check_for_app_update"));
+  },
+
+  async openReleasePage(url: string): Promise<void> {
+    if (!isDesktopRuntime()) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    return invoke("open_release_page", { url });
   },
 };
 

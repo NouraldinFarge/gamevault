@@ -191,6 +191,7 @@ async function checkPresentation() {
     "docs/DEMO.md",
     "docs/media/gamevault-product-tour.mp4",
     "docs/ARCHITECTURE.md",
+    "docs/PERFORMANCE.md",
     "docs/RELEASE_CHECKLIST.md",
     "docs/images/README.md",
     "SECURITY.md",

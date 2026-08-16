@@ -4,8 +4,10 @@ import {
   Brush,
   DatabaseBackup,
   Eraser,
+  ExternalLink,
   FileText,
   Gauge,
+  RefreshCw,
   Save,
   ShieldCheck,
   Stethoscope,
@@ -61,7 +63,24 @@ function SettingsForm({ initial, portableRoot }: { initial: Settings; portableRo
     onSuccess: () => setMessage("Application cache cleared."),
   });
   const logs = useMutation({ mutationFn: nativeClient.openLogsFolder });
-  const error = save.error ?? backup.error ?? restore.error ?? clearCache.error ?? logs.error;
+  const updateCheck = useMutation({
+    mutationFn: nativeClient.checkForAppUpdate,
+    onSuccess: (result) =>
+      setMessage(
+        result.updateAvailable
+          ? `GameVault ${result.latestVersion} is available. Review the official release before downloading.`
+          : `GameVault ${result.currentVersion} is current.`,
+      ),
+  });
+  const openRelease = useMutation({ mutationFn: nativeClient.openReleasePage });
+  const error =
+    save.error ??
+    backup.error ??
+    restore.error ??
+    clearCache.error ??
+    logs.error ??
+    updateCheck.error ??
+    openRelease.error;
 
   const restoreBackup = async () => {
     const path = await nativeClient.chooseBackupFile();
@@ -261,6 +280,55 @@ function SettingsForm({ initial, portableRoot }: { initial: Settings; portableRo
             Clear cache
           </button>
         </div>
+      </section>
+
+      <section className={styles.updatePanel}>
+        <div>
+          <p className="eyebrow">Manual release check</p>
+          <h2>Application updates</h2>
+          <p>
+            Contact the official GameVault GitHub releases endpoint only when you choose. GameVault
+            never downloads or installs an application update automatically.
+          </p>
+        </div>
+        <div className={styles.updateActions}>
+          <button
+            className="button"
+            type="button"
+            disabled={updateCheck.isPending}
+            onClick={() => updateCheck.mutate()}
+          >
+            <RefreshCw aria-hidden="true" size={17} />
+            {updateCheck.isPending ? "Checking GitHub..." : "Check for updates"}
+          </button>
+          {updateCheck.data ? (
+            <button
+              className="button"
+              type="button"
+              disabled={openRelease.isPending}
+              onClick={() => openRelease.mutate(updateCheck.data.releaseUrl)}
+            >
+              Official release
+              <ExternalLink aria-hidden="true" size={15} />
+            </button>
+          ) : null}
+        </div>
+        {updateCheck.data ? (
+          <dl className={styles.updateResult} aria-live="polite">
+            <div>
+              <dt>Installed</dt>
+              <dd>{updateCheck.data.currentVersion}</dd>
+            </div>
+            <div>
+              <dt>Latest stable</dt>
+              <dd>{updateCheck.data.latestVersion}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>{updateCheck.data.updateAvailable ? "Update available" : "Current"}</dd>
+            </div>
+          </dl>
+        ) : null}
       </section>
 
       <section className={styles.diagnostics}>

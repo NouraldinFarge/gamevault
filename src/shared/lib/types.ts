@@ -139,6 +139,11 @@ export const DependencyAuditSchema = z.object({
       officialSourceUrl: z.string().nullable(),
       onlineStatus: z.string(),
       recommendation: z.string(),
+      detectedBy: z.string(),
+      installedEvidence: z.array(z.string()),
+      confidence: z.enum(["high", "medium", "low"]),
+      publisherMatch: z.enum(["verified", "mismatch", "not available", "not evaluated"]),
+      checkedAt: z.string(),
     }),
   ),
 });
@@ -192,6 +197,31 @@ export const StagedPackageAnalysisSchema = z.object({
   warnings: z.array(z.string()),
 });
 
+export const StagingPackageSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+  fileCount: z.number().nullable(),
+  modifiedAt: z.string().nullable(),
+  reviewable: z.boolean(),
+  recoveryHint: z.string(),
+});
+
+export const StagedUpdatePreviewSchema = z.object({
+  isUpdate: z.boolean(),
+  destinationPath: z.string(),
+  rollbackRoot: z.string(),
+  addedCount: z.number(),
+  changedCount: z.number(),
+  removedCount: z.number(),
+  unchangedCount: z.number(),
+  addedSample: z.array(z.string()),
+  changedSample: z.array(z.string()),
+  removedSample: z.array(z.string()),
+  currentSizeBytes: z.number(),
+  proposedSizeBytes: z.number(),
+  fingerprint: z.string().length(64),
+});
+
 export const InstalledPackageSchema = z.object({
   game: GameSchema,
   installedPath: z.string(),
@@ -202,6 +232,32 @@ export const InstalledPackageSchema = z.object({
   updated: z.boolean(),
   warnings: z.array(z.string()),
   reportPath: z.string(),
+  updatePreview: StagedUpdatePreviewSchema,
+});
+
+export const OperationRecordSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  label: z.string(),
+  status: z.enum(["running", "completed", "failed", "interrupted"]),
+  sourcePath: z.string().nullable(),
+  targetPath: z.string().nullable(),
+  summary: z.string(),
+  errorMessage: z.string().nullable(),
+  recoveryHint: z.string(),
+  reportPath: z.string().nullable(),
+  startedAt: z.string(),
+  updatedAt: z.string(),
+  completedAt: z.string().nullable(),
+});
+
+export const AppUpdateCheckSchema = z.object({
+  currentVersion: z.string(),
+  latestVersion: z.string(),
+  updateAvailable: z.boolean(),
+  releaseUrl: z.string().url(),
+  publishedAt: z.string().nullable(),
+  checkedAt: z.string(),
 });
 
 export type Game = z.infer<typeof GameSchema>;
@@ -215,7 +271,11 @@ export type ArchiveInspection = z.infer<typeof ArchiveInspectionSchema>;
 export type StagedArchive = z.infer<typeof StagedArchiveSchema>;
 export type InboxArchive = z.infer<typeof InboxArchiveSchema>;
 export type StagedPackageAnalysis = z.infer<typeof StagedPackageAnalysisSchema>;
+export type StagingPackage = z.infer<typeof StagingPackageSchema>;
+export type StagedUpdatePreview = z.infer<typeof StagedUpdatePreviewSchema>;
 export type InstalledPackage = z.infer<typeof InstalledPackageSchema>;
+export type OperationRecord = z.infer<typeof OperationRecordSchema>;
+export type AppUpdateCheck = z.infer<typeof AppUpdateCheckSchema>;
 export type GameMetadata = z.infer<typeof GameMetadataSchema>;
 
 export type ScanResult = {
@@ -242,6 +302,13 @@ export type InstallStagedInput = {
   executablePath: string;
   title: string;
   archivePath: string | null;
+  updateFingerprint: string;
+};
+
+export type PreviewStagedUpdateInput = {
+  stagingPath: string;
+  executablePath: string;
+  title: string;
 };
 
 export type MetadataLookupInput = {

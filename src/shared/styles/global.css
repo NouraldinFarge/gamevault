@@ -265,3 +265,29 @@
     animation-iteration-count: 1;
   }
 }
+
+@media (forced-colors: active) {
+  .button,
+  .icon-button,
+  .field,
+  .select,
+  .textarea,
+  .notice,
+  .surface {
+    border-color: ButtonText;
+    background: Canvas;
+    color: CanvasText;
+    forced-color-adjust: auto;
+  }
+
+  .button.primary {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .button:disabled,
+  .icon-button:disabled {
+    color: GrayText;
+  }
+}

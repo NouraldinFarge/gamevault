@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 const APPLICATION_ID: i64 = 0x4756_4c54;
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 pub const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS games (
@@ -51,7 +51,25 @@ CREATE TABLE IF NOT EXISTS scan_history (
   unavailable_roots_json TEXT NOT NULL
 );
 
-PRAGMA user_version = 2;
+CREATE TABLE IF NOT EXISTS operations (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'interrupted')),
+  source_path TEXT,
+  target_path TEXT,
+  summary TEXT NOT NULL,
+  error_message TEXT,
+  recovery_hint TEXT NOT NULL,
+  report_path TEXT,
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_operations_started ON operations(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_operations_status ON operations(status);
+
+PRAGMA user_version = 3;
 PRAGMA application_id = 1196837972;
 "#;
 

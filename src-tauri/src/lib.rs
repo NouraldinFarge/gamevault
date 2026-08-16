@@ -1,13 +1,17 @@
 mod app;
+mod archive_paths;
 mod archives;
 mod commands;
 mod dependencies;
 mod diagnostics;
+mod file_diff;
 mod metadata;
 mod models;
+mod operations;
 mod path_safety;
 mod scanner;
 mod storage;
+mod updates;
 mod workspace;
 
 use app::{resolve_portable_root, AppCore};
@@ -55,11 +59,16 @@ pub fn run() -> Result<(), String> {
             commands::inspect_game_archive,
             commands::stage_game_archive,
             commands::list_inbox_archives,
+            commands::list_staging_packages,
+            commands::get_operation_history,
             commands::analyze_staged_package,
+            commands::preview_staged_update,
             commands::install_staged_package,
             commands::lookup_game_metadata,
             commands::save_game_metadata,
-            commands::open_official_store_search
+            commands::open_official_store_search,
+            commands::check_for_app_update,
+            commands::open_release_page
         ])
         .run(tauri::generate_context!())
         .map_err(|error| error.to_string())

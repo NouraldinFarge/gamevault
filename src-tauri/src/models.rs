@@ -226,6 +226,11 @@ pub struct DependencyItem {
     pub official_source_url: Option<String>,
     pub online_status: String,
     pub recommendation: String,
+    pub detected_by: String,
+    pub installed_evidence: Vec<String>,
+    pub confidence: String,
+    pub publisher_match: String,
+    pub checked_at: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -287,6 +292,43 @@ pub struct StagedPackageAnalysis {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagingPackage {
+    pub path: String,
+    pub name: String,
+    pub file_count: Option<usize>,
+    pub modified_at: Option<String>,
+    pub reviewable: bool,
+    pub recovery_hint: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewStagedUpdateInput {
+    pub staging_path: String,
+    pub executable_path: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagedUpdatePreview {
+    pub is_update: bool,
+    pub destination_path: String,
+    pub rollback_root: String,
+    pub added_count: usize,
+    pub changed_count: usize,
+    pub removed_count: usize,
+    pub unchanged_count: usize,
+    pub added_sample: Vec<String>,
+    pub changed_sample: Vec<String>,
+    pub removed_sample: Vec<String>,
+    pub current_size_bytes: u64,
+    pub proposed_size_bytes: u64,
+    pub fingerprint: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallStagedInput {
@@ -294,6 +336,7 @@ pub struct InstallStagedInput {
     pub executable_path: String,
     pub title: String,
     pub archive_path: Option<String>,
+    pub update_fingerprint: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -308,6 +351,36 @@ pub struct InstalledPackage {
     pub updated: bool,
     pub warnings: Vec<String>,
     pub report_path: String,
+    pub update_preview: StagedUpdatePreview,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationRecord {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    pub status: String,
+    pub source_path: Option<String>,
+    pub target_path: Option<String>,
+    pub summary: String,
+    pub error_message: Option<String>,
+    pub recovery_hint: String,
+    pub report_path: Option<String>,
+    pub started_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateCheck {
+    pub current_version: String,
+    pub latest_version: String,
+    pub update_available: bool,
+    pub release_url: String,
+    pub published_at: Option<String>,
+    pub checked_at: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

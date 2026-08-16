@@ -99,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className={styles.main} id="main-content">
+      <main className={styles.main} id="main-content" tabIndex={-1}>
         {!isDesktopRuntime() ? (
           <aside className={styles.demoBanner} aria-label="Synthetic demonstration">
             <ShieldCheck className={styles.demoBannerIcon} aria-hidden="true" size={19} />

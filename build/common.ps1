@@ -90,6 +90,110 @@ function Assert-NoReparsePoints {
     }
 }
 
+function New-DeterministicPortableZip {
+    param(
+        [Parameter(Mandatory)][string]$SourceDirectory,
+        [Parameter(Mandatory)][string]$ArchivePath
+    )
+    $source = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\')
+    $destination = [System.IO.Path]::GetFullPath($ArchivePath)
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) {
+        throw "Portable ZIP source directory is missing: $source"
+    }
+    if (Test-Path -LiteralPath $destination) {
+        throw "Portable archive already exists and will not be overwritten: $destination"
+    }
+    Assert-NoReparsePoints -Path $source -Label 'Portable ZIP source'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+
+    Add-Type -AssemblyName System.IO.Compression
+    $rootName = Split-Path -Leaf $source
+    $directoryNames = [System.Collections.Generic.List[string]]::new()
+    $directoryNames.Add("$rootName/")
+    foreach ($directory in Get-ChildItem -LiteralPath $source -Directory -Recurse -Force) {
+        $relative = $directory.FullName.Substring($source.Length).TrimStart('\').Replace('\', '/')
+        $directoryNames.Add("$rootName/$relative/")
+    }
+    $sortedDirectories = $directoryNames.ToArray()
+    [System.Array]::Sort($sortedDirectories, [System.StringComparer]::Ordinal)
+
+    $filesByName = [System.Collections.Generic.Dictionary[string, string]]::new(
+        [System.StringComparer]::Ordinal
+    )
+    foreach ($file in Get-ChildItem -LiteralPath $source -File -Recurse -Force) {
+        $relative = $file.FullName.Substring($source.Length).TrimStart('\').Replace('\', '/')
+        $filesByName.Add("$rootName/$relative", $file.FullName)
+    }
+    $sortedFiles = [string[]]@($filesByName.Keys)
+    [System.Array]::Sort($sortedFiles, [System.StringComparer]::Ordinal)
+
+    $fixedTimestamp = [System.DateTimeOffset]::new(
+        2000, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero
+    )
+    $archiveStream = [System.IO.File]::Open(
+        $destination,
+        [System.IO.FileMode]::CreateNew,
+        [System.IO.FileAccess]::Write,
+        [System.IO.FileShare]::None
+    )
+    try {
+        $zip = [System.IO.Compression.ZipArchive]::new(
+            $archiveStream,
+            [System.IO.Compression.ZipArchiveMode]::Create,
+            $false
+        )
+        try {
+            foreach ($entryName in $sortedDirectories) {
+                $entry = $zip.CreateEntry(
+                    $entryName,
+                    [System.IO.Compression.CompressionLevel]::Optimal
+                )
+                $entry.LastWriteTime = $fixedTimestamp
+                $entry.ExternalAttributes = 16
+            }
+            foreach ($entryName in $sortedFiles) {
+                $entry = $zip.CreateEntry(
+                    $entryName,
+                    [System.IO.Compression.CompressionLevel]::Optimal
+                )
+                $entry.LastWriteTime = $fixedTimestamp
+                $entry.ExternalAttributes = 0
+                $inputStream = [System.IO.File]::Open(
+                    $filesByName[$entryName],
+                    [System.IO.FileMode]::Open,
+                    [System.IO.FileAccess]::Read,
+                    [System.IO.FileShare]::Read
+                )
+                try {
+                    $outputStream = $entry.Open()
+                    try {
+                        $inputStream.CopyTo($outputStream)
+                    }
+                    finally {
+                        $outputStream.Dispose()
+                    }
+                }
+                finally {
+                    $inputStream.Dispose()
+                }
+            }
+        }
+        finally {
+            $zip.Dispose()
+        }
+    }
+    catch {
+        $archiveStream.Dispose()
+        if (Test-Path -LiteralPath $destination -PathType Leaf) {
+            [System.IO.File]::Delete($destination)
+        }
+        throw
+    }
+    finally {
+        $archiveStream.Dispose()
+    }
+}
+
 function Copy-DirectoryContents {
     param(
         [Parameter(Mandatory)][string]$Source,

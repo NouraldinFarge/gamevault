@@ -17,7 +17,7 @@ if (Test-Path -LiteralPath $archive) {
 }
 
 New-Item -ItemType Directory -Path (Split-Path -Parent $archive) -Force | Out-Null
-Compress-Archive -LiteralPath $stage -DestinationPath $archive -CompressionLevel Optimal
+New-DeterministicPortableZip -SourceDirectory $stage -ArchivePath $archive
 
 $verifyRoot = Join-Path $project "workspace\temp\archive-verify-$([guid]::NewGuid().ToString('N'))"
 Assert-ChildPath -Path $verifyRoot -Parent (Join-Path $project 'workspace\temp') -Label 'archive verification root'

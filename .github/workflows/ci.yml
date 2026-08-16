@@ -40,6 +40,12 @@ jobs:
       - name: Verify TypeScript and React
         run: pnpm verify
 
+      - name: Install pinned browser runtime
+        run: pnpm exec playwright install chromium
+
+      - name: Verify browser journeys and accessibility
+        run: pnpm test:e2e
+
       - name: Audit production JavaScript dependencies
         run: pnpm audit --prod
 
@@ -51,3 +57,9 @@ jobs:
 
       - name: Test Rust authority
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: Verify archive fuzz harness
+        shell: pwsh
+        run: |
+          $env:RUSTFLAGS = "-Dwarnings"
+          cargo check --manifest-path fuzz/Cargo.toml --locked --all-targets
