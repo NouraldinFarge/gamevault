@@ -6,7 +6,7 @@ Use this checklist from a clean `main` checkout. Existing immutable tags and rel
 
 - Confirm `main` is synchronized with `origin/main` and the worktree contains only the intended release changes.
 - Review open pull requests, Dependabot proposals, CodeQL, branch protection, workflow permissions, and pinned action commits.
-- Set the same semantic version in `VERSION`, `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, the browser-preview health fixture, README, and changelog.
+- Replace the development identity with the same stable semantic version in `VERSION`, `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, the browser-preview health fixture, `release-status.json`, README, and changelog. Set `sourceStatus` to `release-ready`, but keep `latestPublicVersion` on the prior immutable release until the new public artifact exists.
 - Confirm the tag will be exactly `v` plus the value in `VERSION`.
 
 ## Verify

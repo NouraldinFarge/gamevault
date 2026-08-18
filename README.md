@@ -26,9 +26,11 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
 </p>
 
-<p align="center"><sub>Windows 10/11 x64 · Portable ZIP · No installer · Currently unsigned · Active 2026 portfolio project · Current release 0.3.5</sub></p>
+<p align="center"><sub>Windows 10/11 x64 · Portable ZIP · No installer · Currently unsigned · Active 2026 portfolio project · Latest public release 0.3.5 · Development build 0.4.0-dev.0 (source only)</sub></p>
 
 [![Watch the 45-second GameVault product tour](docs/media/gamevault-product-tour-poster.jpg)](docs/media/gamevault-product-tour.mp4)
+
+[Read the time-coded product-tour transcript](docs/media/gamevault-product-tour-transcript.md).
 
 <p align="center">
   <a href="https://nouraldinfarge.github.io/gamevault/">Open the zero-authority synthetic demo</a>
@@ -105,6 +107,8 @@ Read the complete [security policy](SECURITY.md) and [architecture trust boundar
 
 See the latest [GitHub Actions results](https://github.com/NouraldinFarge/gamevault/actions) and the immutable [v0.3.5 release](https://github.com/NouraldinFarge/gamevault/releases/tag/v0.3.5).
 
+The repository is currently working toward the `0.4.0` milestone under the synchronized source identity `0.4.0-dev.0`. It is not a public-download or release claim; [`docs/RELEASE_STATUS.md`](docs/RELEASE_STATUS.md) explains the boundary and remaining publication gates, while [`release-status.json`](release-status.json) exposes the distinction in machine-readable form.
+
 ## Architecture
 
 ```mermaid
@@ -165,6 +169,8 @@ Use `pnpm dev` for the synthetic browser preview or `cargo run --manifest-path s
 | Document | Start here when you want to… |
 | --- | --- |
 | [Synthetic demo guide](docs/DEMO.md) | Tour the public browser preview and understand its authority boundary |
+| [Release status](docs/RELEASE_STATUS.md) | Distinguish the latest public artifact from the next source milestone |
+| [Product-tour transcript](docs/media/gamevault-product-tour-transcript.md) | Read the silent 45-second walkthrough without playing video |
 | [Architecture](docs/ARCHITECTURE.md) | Understand native authority, portable state, and recovery |
 | [Performance](docs/PERFORMANCE.md) | Review scale limits, bounded rendering, and the reproducible benchmark fixture |
 | [Security policy](SECURITY.md) | Review trust boundaries or report a vulnerability privately |

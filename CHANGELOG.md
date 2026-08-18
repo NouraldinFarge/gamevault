@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 - Unreleased
+
+This is the next development milestone, not a published release. The latest public Windows artifact remains the immutable `v0.3.5` release until every release gate passes and a new tag is published.
 
 - Persist scans, archive staging, promotion, and prerequisite audits; reconcile unfinished records after restart; and expose operation history plus recoverable Staging folders without silently resuming work.
 - Require a bounded file-level install/update preview and recompute its SHA-256 content fingerprint immediately before promotion, preventing a changed staged package from reusing stale approval.
