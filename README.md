@@ -15,7 +15,7 @@
   · <a href="https://github.com/NouraldinFarge/gamevault/releases/latest"><strong>Download for Windows</strong></a>
   · <a href="#safety-model">Safety model</a>
   · <a href="#build-and-verify">Build from source</a>
-  · <a href="https://github.com/NouraldinFarge">GitHub portfolio</a>
+  · <a href="https://nouraldinfarge.github.io/">Engineering portfolio</a>
 </p>
 
 <p align="center">
