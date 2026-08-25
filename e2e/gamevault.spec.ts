@@ -1,7 +1,31 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 
+async function expectAppStylesReady(page: Page) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const shell = document.querySelector<HTMLElement>("[data-theme]");
+          const skipLink = document.querySelector<HTMLAnchorElement>('a[href="#main-content"]');
+
+          if (!shell || !skipLink) {
+            return { canvasTokenReady: false, skipLinkPosition: "" };
+          }
+
+          return {
+            canvasTokenReady:
+              getComputedStyle(shell).getPropertyValue("--color-canvas").trim().length > 0,
+            skipLinkPosition: getComputedStyle(skipLink).position,
+          };
+        }),
+      { message: "GameVault's production styles should be applied before accessibility analysis" },
+    )
+    .toEqual({ canvasTokenReady: true, skipLinkPosition: "fixed" });
+}
+
 async function expectNoSeriousAccessibilityViolations(page: Page) {
+  await expectAppStylesReady(page);
   const results = await new AxeBuilder({ page }).analyze();
   const violations = results.violations.filter(
     (violation) => violation.impact === "serious" || violation.impact === "critical",
@@ -43,6 +67,17 @@ test("the synthetic boundary and primary journey are clear", async ({ page }) =>
     "aria-pressed",
     "true",
   );
+});
+
+test("the boot color contract prevents a white unstyled canvas", async ({ page }) => {
+  await page.route("**/*.css", (route) => route.abort());
+  await page.goto("/");
+
+  const skipLink = page.getByRole("link", { name: "Skip to content" });
+  await expect(skipLink).toBeAttached();
+  await expect(page.locator("html")).toHaveCSS("background-color", "rgb(10, 15, 29)");
+  await expect(page.locator("body")).toHaveCSS("color", "rgb(236, 242, 250)");
+  await expect(skipLink).toHaveCSS("color", "rgb(236, 242, 250)");
 });
 
 test("archive intake requires a current preview before organization", async ({ page }) => {
