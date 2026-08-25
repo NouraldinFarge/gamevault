@@ -163,6 +163,7 @@ async function checkPresentation() {
   const sourceVersion = manifest.version;
   const publicVersion = releaseStatus.latestPublicVersion;
   const readme = await readFile(path.join(root, "README.md"), "utf8");
+  const indexHtml = await readFile(path.join(root, "index.html"), "utf8");
   const changelog = await readFile(path.join(root, "CHANGELOG.md"), "utf8");
   const appShell = await readFile(path.join(root, "src/app/AppShell.tsx"), "utf8");
   const compactAppShell = appShell.replace(/\s+/g, " ");
@@ -221,6 +222,23 @@ async function checkPresentation() {
     !readme.includes('throw "GameVault archive checksum mismatch"')
   ) {
     failures.push("README.md: checksum instructions must compare expected and actual hashes");
+  }
+
+  for (const required of [
+    "<title>GameVault — Portable, local-first game library</title>",
+    'name="description"',
+    'name="robots" content="index,follow"',
+    'rel="canonical" href="https://nouraldinfarge.github.io/gamevault/"',
+    'property="og:title"',
+    'property="og:description"',
+    'property="og:url" content="https://nouraldinfarge.github.io/gamevault/"',
+    'property="og:image"',
+    'property="og:image:alt"',
+    'name="twitter:card" content="summary_large_image"',
+  ]) {
+    if (!indexHtml.includes(required)) {
+      failures.push(`index.html: missing required sharing or discovery metadata ${required}`);
+    }
   }
 
   for (const relative of [
