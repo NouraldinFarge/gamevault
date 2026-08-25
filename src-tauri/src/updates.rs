@@ -1,5 +1,6 @@
 use crate::models::AppUpdateCheck;
 use chrono::Utc;
+use semver::Version;
 use serde::Deserialize;
 use std::io::Read;
 use std::time::Duration;
@@ -91,25 +92,9 @@ fn compare_versions(left: &str, right: &str) -> Result<std::cmp::Ordering, Strin
     Ok(parse_version(left)?.cmp(&parse_version(right)?))
 }
 
-fn parse_version(value: &str) -> Result<(u64, u64, u64), String> {
-    let core = value
-        .split_once(['-', '+'])
-        .map(|(core, _)| core)
-        .unwrap_or(value);
-    let parts = core.split('.').collect::<Vec<_>>();
-    if parts.len() != 3 {
-        return Err("The release tag is not a supported semantic version.".to_string());
-    }
-    let major = parts[0]
-        .parse::<u64>()
-        .map_err(|_| "The release major version is invalid.".to_string())?;
-    let minor = parts[1]
-        .parse::<u64>()
-        .map_err(|_| "The release minor version is invalid.".to_string())?;
-    let patch = parts[2]
-        .parse::<u64>()
-        .map_err(|_| "The release patch version is invalid.".to_string())?;
-    Ok((major, minor, patch))
+fn parse_version(value: &str) -> Result<Version, String> {
+    Version::parse(value)
+        .map_err(|_| "The release tag is not a supported semantic version.".to_string())
 }
 
 #[cfg(test)]
@@ -125,6 +110,14 @@ mod tests {
         assert_eq!(
             compare_versions("1.0.0", "1.0.0").expect("compare"),
             std::cmp::Ordering::Equal
+        );
+        assert_eq!(
+            compare_versions("0.4.0", "0.4.0-dev.0").expect("compare"),
+            std::cmp::Ordering::Greater
+        );
+        assert_eq!(
+            compare_versions("0.4.0-dev.0", "0.3.5").expect("compare"),
+            std::cmp::Ordering::Greater
         );
         assert!(compare_versions("1.0", "1.0.0").is_err());
     }

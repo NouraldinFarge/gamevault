@@ -104,11 +104,18 @@ export function AppShell({ children }: { children: ReactNode }) {
           <aside className={styles.demoBanner} aria-label="Synthetic demonstration">
             <ShieldCheck className={styles.demoBannerIcon} aria-hidden="true" size={19} />
             <span>
-              <strong>Synthetic demonstration</strong>
-              <small>No filesystem access, game files, downloads, or native execution.</small>
+              <strong>Synthetic 0.4.0 development preview</strong>
+              <small>
+                No filesystem access, game files, downloads, or native execution. Latest public
+                Windows release: v0.3.5.
+              </small>
             </span>
-            <a href="https://github.com/NouraldinFarge/gamevault" target="_blank" rel="noreferrer">
-              Source and Windows release
+            <a
+              href="https://github.com/NouraldinFarge/gamevault/releases/tag/v0.3.5"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Verified v0.3.5 release
               <ExternalLink aria-hidden="true" size={14} />
             </a>
           </aside>

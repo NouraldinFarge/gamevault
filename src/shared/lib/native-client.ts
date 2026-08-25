@@ -205,7 +205,7 @@ export const nativeClient = {
     if (!isDesktopRuntime()) {
       return {
         ok: true,
-        appVersion: "0.3.5",
+        appVersion: "0.4.0-dev.0",
         portableRoot: mockSnapshot.portableRoot,
         databasePath: `${mockSnapshot.portableRoot}\\data\\library.db`,
         sqliteVersion: mockSnapshot.sqliteVersion,
@@ -558,7 +558,7 @@ export const nativeClient = {
     if (!isDesktopRuntime()) {
       await pause(400);
       return AppUpdateCheckSchema.parse({
-        currentVersion: "0.3.5",
+        currentVersion: "0.4.0-dev.0",
         latestVersion: "0.3.5",
         updateAvailable: false,
         releaseUrl: "https://github.com/NouraldinFarge/gamevault/releases/tag/v0.3.5",

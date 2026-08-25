@@ -43,8 +43,15 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content -Raw -LiteralPath VERSION).Trim()
+          $status = Get-Content -Raw -LiteralPath release-status.json | ConvertFrom-Json
           if ($env:GITHUB_REF_NAME -ne "v$version") {
             throw "Tag $env:GITHUB_REF_NAME does not match VERSION $version."
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Release publication requires a stable semantic version; found $version."
+          }
+          if ($status.sourceVersion -ne $version -or $status.targetVersion -ne $version -or $status.sourceStatus -ne 'release-ready') {
+            throw "release-status.json must match the stable VERSION and declare sourceStatus=release-ready."
           }
 
       - name: Build and verify portable package

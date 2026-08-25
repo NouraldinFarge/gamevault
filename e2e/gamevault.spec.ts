@@ -25,6 +25,13 @@ test("the synthetic boundary and primary journey are clear", async ({ page }) =>
   await expect(page.getByRole("complementary", { name: "Synthetic demonstration" })).toContainText(
     "No filesystem access",
   );
+  await expect(page.getByRole("complementary", { name: "Synthetic demonstration" })).toContainText(
+    "Synthetic 0.4.0 development preview",
+  );
+  await expect(page.getByRole("link", { name: "Verified v0.3.5 release" })).toHaveAttribute(
+    "href",
+    "https://github.com/NouraldinFarge/gamevault/releases/tag/v0.3.5",
+  );
   await expect(page.getByRole("heading", { name: "Good to see you." })).toBeVisible();
 
   await page.getByRole("link", { name: "Library", exact: true }).click();

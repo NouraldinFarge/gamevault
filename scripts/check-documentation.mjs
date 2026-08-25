@@ -159,14 +159,62 @@ async function checkMedia() {
 
 async function checkPresentation() {
   const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-  const version = manifest.version;
+  const releaseStatus = JSON.parse(await readFile(path.join(root, "release-status.json"), "utf8"));
+  const sourceVersion = manifest.version;
+  const publicVersion = releaseStatus.latestPublicVersion;
   const readme = await readFile(path.join(root, "README.md"), "utf8");
+  const indexHtml = await readFile(path.join(root, "index.html"), "utf8");
+  const changelog = await readFile(path.join(root, "CHANGELOG.md"), "utf8");
+  const appShell = await readFile(path.join(root, "src/app/AppShell.tsx"), "utf8");
+  const compactAppShell = appShell.replace(/\s+/g, " ");
+  const milestone = changelog.match(/^## (\d+\.\d+\.\d+) - (Unreleased|\d{4}-\d{2}-\d{2})$/m);
+  const targetVersion = releaseStatus.targetVersion;
 
-  if (!readme.includes(`Current release ${version}`)) {
-    failures.push(`README.md: current release does not match package.json (${version})`);
+  if (releaseStatus.sourceVersion !== sourceVersion) {
+    failures.push(
+      `release-status.json: sourceVersion does not match package.json (${sourceVersion})`,
+    );
   }
-  if (!readme.includes(`GameVault-v${version}-windows-x64-portable.zip`)) {
-    failures.push(`README.md: download filename does not match package.json (${version})`);
+  if (!milestone || milestone[1] !== targetVersion) {
+    failures.push(`CHANGELOG.md: first milestone does not match target version (${targetVersion})`);
+  }
+  if (releaseStatus.sourceStatus === "unreleased") {
+    if (!sourceVersion.startsWith(`${targetVersion}-`) || milestone?.[2] !== "Unreleased") {
+      failures.push(
+        "release-status.json: unreleased source requires a prerelease identity and Unreleased changelog",
+      );
+    }
+    if (!readme.includes(`Development build ${sourceVersion} (source only)`)) {
+      failures.push(`README.md: development build does not match package.json (${sourceVersion})`);
+    }
+  } else if (releaseStatus.sourceStatus === "release-ready") {
+    if (sourceVersion !== targetVersion || milestone?.[2] === "Unreleased") {
+      failures.push(
+        "release-status.json: release-ready source requires a stable identity and dated changelog",
+      );
+    }
+    if (!readme.includes(`Release candidate ${sourceVersion} (not public)`)) {
+      failures.push(
+        `README.md: stable candidate must remain visibly distinct from the public release`,
+      );
+    }
+  } else {
+    failures.push(`release-status.json: unsupported sourceStatus ${releaseStatus.sourceStatus}`);
+  }
+  if (!readme.includes(`Latest public release ${publicVersion}`)) {
+    failures.push(
+      `README.md: latest public release does not match release-status.json (${publicVersion})`,
+    );
+  }
+  if (!readme.includes(`GameVault-v${publicVersion}-windows-x64-portable.zip`)) {
+    failures.push(`README.md: download filename does not match package.json (${publicVersion})`);
+  }
+  if (
+    !compactAppShell.includes(`Synthetic ${targetVersion} development preview`) ||
+    !compactAppShell.includes(`Latest public Windows release: v${publicVersion}.`) ||
+    !compactAppShell.includes(`/releases/tag/v${publicVersion}`)
+  ) {
+    failures.push("src/app/AppShell.tsx: preview and public-release identities are out of sync");
   }
   if (
     !readme.includes("$expected") ||
@@ -174,6 +222,23 @@ async function checkPresentation() {
     !readme.includes('throw "GameVault archive checksum mismatch"')
   ) {
     failures.push("README.md: checksum instructions must compare expected and actual hashes");
+  }
+
+  for (const required of [
+    "<title>GameVault — Portable, local-first game library</title>",
+    'name="description"',
+    'name="robots" content="index,follow"',
+    'rel="canonical" href="https://nouraldinfarge.github.io/gamevault/"',
+    'property="og:title"',
+    'property="og:description"',
+    'property="og:url" content="https://nouraldinfarge.github.io/gamevault/"',
+    'property="og:image"',
+    'property="og:image:alt"',
+    'name="twitter:card" content="summary_large_image"',
+  ]) {
+    if (!indexHtml.includes(required)) {
+      failures.push(`index.html: missing required sharing or discovery metadata ${required}`);
+    }
   }
 
   for (const relative of [
@@ -190,6 +255,9 @@ async function checkPresentation() {
     "https://nouraldinfarge.github.io/gamevault/",
     "docs/DEMO.md",
     "docs/media/gamevault-product-tour.mp4",
+    "docs/media/gamevault-product-tour-transcript.md",
+    "docs/RELEASE_STATUS.md",
+    "release-status.json",
     "docs/ARCHITECTURE.md",
     "docs/PERFORMANCE.md",
     "docs/RELEASE_CHECKLIST.md",

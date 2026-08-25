@@ -54,6 +54,10 @@ function Test-DerivedVersion {
     if ($tauri.version -ne $Version) {
         throw 'tauri.conf.json version does not match the authoritative VERSION file.'
     }
+    $releaseStatus = Get-Content -Raw -LiteralPath (Join-Path $WorkspaceRoot 'release-status.json') | ConvertFrom-Json
+    if ($releaseStatus.sourceVersion -ne $Version) {
+        throw 'release-status.json sourceVersion does not match the authoritative VERSION file.'
+    }
 }
 
 function Invoke-PortableHealthCheck {
