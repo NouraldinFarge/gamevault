@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0f1d" />
     <meta name="color-scheme" content="dark" />
+    <style>
+      @layer boot, tokens, reset, base, components, utilities;
+
+      @layer boot {
+        :root {
+          color-scheme: dark;
+        }
+
+        :root,
+        body {
+          background: #0a0f1d;
+          color: #ecf2fa;
+        }
+
+        a {
+          color: inherit;
+        }
+      }
+    </style>
     <meta
       name="description"
       content="Explore GameVault's browser-safe synthetic demo: a portable, local-first Windows game library with review-gated archive intake."
