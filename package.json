@@ -16,8 +16,8 @@
     "verify": "pnpm docs:check && pnpm check && pnpm test && pnpm build"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.102.0",
-    "@tanstack/react-router": "^1.170.31",
+    "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-router": "^1.170.32",
     "@tauri-apps/api": "^2.0.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.8",
